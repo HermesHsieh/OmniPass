@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>商品卡條碼配對與模擬卡包 (GitHub Pages 版)</title>
+  <title>商品卡條碼配對與模擬卡包 (GitHub Pages 永久儲存版)</title>
   <style>
     :root {
       --barcode-width: 82%;
@@ -48,6 +48,8 @@
     }
     .btn:hover { background-color: #0077ed; }
     .btn:disabled { background-color: #aeaeb2; cursor: not-allowed; }
+    .btn-danger { background-color: #ff453a; }
+    .btn-danger:hover { background-color: #ff3b30; }
     
     .filter-panel {
       display: grid;
@@ -355,7 +357,7 @@
 <body>
 
   <h1>商品卡條碼配對與模擬卡包</h1>
-  <p class="subtitle">📸 實體卡細節還原 ・ 修正編碼圖案為 CODE39 粗細間距真跡版</p>
+  <p class="subtitle">📸 實體卡細節還原 ・ 整合 IndexedDB 萬張級永久歷史卡包暫存架構</p>
 
   <div class="card" style="padding: 15px 20px;">
     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -366,12 +368,12 @@
 
   <div class="card">
     <div class="control-panel">
-      <div>
-        <!-- 針對手機端優化：添加 capture="environment" 點擊可直接喚起後相機拍照 -->
+      <div style="display: flex; gap: 10px;">
         <input type="file" id="file-input" accept="image/*,.heic,.heif" capture="environment" style="display: none;">
         <button class="btn" id="upload-btn" disabled>上傳/拍照 卡片大合照</button>
+        <button class="btn btn-danger" id="clear-db-btn">一鍵清空歷史卡包</button>
       </div>
-      <div style="font-size: 14px; color: #86868b;">
+      <div style="font-size: 14px; color: #86868b;" id="storage-status">
         * 本地自動進行 2000px 等比縮小預防閃退
       </div>
     </div>
@@ -427,7 +429,7 @@
   </div>
 
   <div class="card" style="padding: 10px;">
-    <details open> <!-- 預設展開以便手機即時查看畫布 -->
+    <details> 
       <summary style="cursor: pointer; font-weight: bold; color: #1d1d1f; padding: 5px;">展開/收合 原始影像實體定位 Debug 圖</summary>
       <div id="visual-area" style="margin-top: 10px; background: #1d1d1f; min-height: 100px; display: flex; justify-content: center; align-items: center; overflow: auto;">
         <canvas id="preview-canvas"></canvas>
@@ -443,6 +445,7 @@
   <script type="module">
     const engineStatus = document.getElementById('engine-status');
     const uploadBtn = document.getElementById('upload-btn');
+    const clearDbBtn = document.getElementById('clear-db-btn');
     const fileInput = document.getElementById('file-input');
     const logPanel = document.getElementById('log-panel');
     const errorBanner = document.getElementById('error-banner');
@@ -466,6 +469,12 @@
 
     let zbarModule = null;
     let globalCardPairs = [];
+    let db = null;
+
+    // IndexedDB 配置參數
+    const DB_NAME = 'BarcodeWalletDB';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'cards';
 
     function log(message, type = 'info') {
       const time = new Date().toLocaleTimeString();
@@ -474,6 +483,79 @@
       logPanel.innerHTML += `<div style="color: ${color}">[${time}] ${message}</div>`;
       logPanel.scrollTop = logPanel.scrollHeight;
     }
+
+    // 初始化萬級沙盒 IndexedDB 資料庫
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = (e) => {
+          log('❌ IndexedDB 初始化失敗', 'error');
+          reject(e);
+        };
+        request.onsuccess = (e) => {
+          db = e.target.result;
+          log('📦 IndexedDB 儲存庫連線成功！已啟用上千張大容量暫存優化。');
+          resolve(db);
+        };
+        request.onupgradeneeded = (e) => {
+          const database = e.target.result;
+          if (!database.objectStoreNames.contains(STORE_NAME)) {
+            // 自動遞增主鍵，用於儲存無上限卡片串列
+            database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+          }
+        };
+      });
+    }
+
+    // 從資料庫讀取卡片
+    function loadCardsFromDB() {
+      if (!db) return;
+      const transaction = db.transaction([STORE_NAME], 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        if (request.result && request.result.length > 0) {
+          globalCardPairs = request.result.map(item => item.pair);
+          log(`已從本地暫存區還原 ${globalCardPairs.length} 張卡片記錄`);
+          generateCardWallet(globalCardPairs);
+        } else {
+          log('歡迎使用！目前本地卡包無暫存卡片。');
+        }
+      };
+    }
+
+    // 增量儲存新掃描到的卡片到資料庫（避免覆蓋）
+    function saveCardsToDB(newPairs) {
+      if (!db || newPairs.length === 0) return;
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+
+      newPairs.forEach(pair => {
+        store.add({ pair, timestamp: Date.now() });
+      });
+
+      transaction.oncomplete = () => {
+        log(`💾 成功將 ${newPairs.length} 張新卡片寫入 IndexedDB 本地沙盒。`);
+      };
+    }
+
+    // 一鍵刪除暫存按鈕事件
+    clearDbBtn.addEventListener('click', () => {
+      if (!confirm('確定要清空所有本地暫存的卡片嗎？此動作無法復原。')) return;
+      if (!db) return;
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.clear();
+
+      request.onsuccess = () => {
+        globalCardPairs = [];
+        walletCarousel.innerHTML = '';
+        walletSection.style.display = 'none';
+        log('🧹 已成功清空 IndexedDB 資料庫內的所有卡片！');
+        alert('卡包已清空');
+      };
+    });
 
     async function initWasm() {
       try {
@@ -485,16 +567,19 @@
         testCanvas.width = 10; testCanvas.height = 10;
         await zbarModule.scanImageData(testCanvas.getContext('2d').getImageData(0, 0, 10, 10));
         
-        engineStatus.innerText = '已就緒 (CODE39 完美還原版)';
+        engineStatus.innerText = '已就緒 (CODE39 永久儲存版)';
         engineStatus.style.color = '#34c759';
         uploadBtn.disabled = false;
         log('🎉 CODE39 條碼間距真跡比對模組部署完畢！');
+        
+        // Wasm 載入成功後，立刻啟動資料庫並還原歷史卡片
+        await initDB();
+        loadCardsFromDB();
       } catch (err) {
         log(`❌ 初始化失敗: ${err.message}`, 'error');
       }
     }
 
-    // 新增：影像底層像素級除錯分析函式
     function runPixelLevelDebugger(ctx, w, h) {
       log("🚨 ZBar 引擎未偵測到條碼，正在啟動像素級底層除錯診斷...", "error");
       try {
@@ -516,7 +601,6 @@
         const avgBrightness = totalBrightness / pixelCount;
         const contrastPct = Math.round(((maxBright - minBright) / 255) * 100);
 
-        // 邊緣清晰度檢測 (拉普拉斯算子模擬)
         let edgeScore = 0;
         for (let y = 5; y < h - 5; y += 5) {
           for (let x = 5; x < w - 5; x += 5) {
@@ -529,18 +613,17 @@
         }
         const blurScore = Math.round((edgeScore / (pixelCount / 25)) * 10);
 
-        // 將結果直接用 Error 顏色噴在手機日誌面板上
         log(`📋 【診斷報告】`, 'error');
         log(`🌓 圖片黑白對比度: ${contrastPct}% (建議 > 50%)`, contrastPct < 50 ? 'error' : 'info');
         log(`🔍 邊緣銳利度得分: ${blurScore} (建議 > 200)`, blurScore < 200 ? 'error' : 'info');
         log(`💡 平均環境亮度值: ${Math.round(avgBrightness)} (128為中庸)`, 'info');
 
         if (blurScore < 200) {
-          log("💡 診斷結果：影像「嚴重模糊」或對焦失敗！即使拍照姿勢一樣，手機可能因為太靠近卡片而沒對到焦，請退後 5 公分再拍。", "error");
+          log("💡 診斷結果：影像「嚴重模糊」或對焦失敗！", "error");
         } else if (contrastPct < 50) {
-          log("💡 診斷結果：對比度不足！這批新商品卡可能有大面積反光白點，或者是環境光源太暗，請稍微傾斜手機斜拍避開日光燈反光。", "error");
+          log("💡 診斷結果：對比度不足！可能大面積反光，請稍微傾斜手機斜拍避開日光燈反光。", "error");
         } else {
-          log("💡 診斷結果：影像清晰且無大反光。可能是新商品卡的條碼規格不屬於系統設定的範圍，或字元長度超出過濾器的限制，請檢查上方的最大/最小長度設定。", "error");
+          log("💡 診斷結果：影像清晰。可能是新商品卡的條碼字元長度超出過濾器的限制，請檢查上方的最大/最小長度設定。", "error");
         }
       } catch (e) {
         log(`除錯分析器運作異常: ${e.message}`, 'error');
@@ -573,8 +656,6 @@
       if (!file) return;
 
       errorBanner.style.display = 'none';
-      walletSection.style.display = 'none';
-      walletCarousel.innerHTML = '';
 
       let imageSrcUrl = URL.createObjectURL(file);
       if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
@@ -599,7 +680,6 @@
 
         try {
           const symbols = await zbarModule.scanImageData(ctx.getImageData(0, 0, w, h));
-          // 將畫布 ctx 傳遞進去，當找不到條碼時可以立刻提取像素分析
           processDetectedSymbols(symbols, ctx, w, h);
         } catch (err) { log(`辨識錯誤: ${err.message}`, 'error'); }
       };
@@ -624,7 +704,6 @@
 
       if (validItems.length === 0) { 
         showError('找不到符合規格的一維條碼'); 
-        // 觸發底層 Debug Console 噴出詳細數據
         runPixelLevelDebugger(ctx, w, h);
         return; 
       }
@@ -647,15 +726,21 @@
         } else { cardPairs.push([current]); }
       }
 
-      globalCardPairs = cardPairs;
-      log(`成功配對出 ${cardPairs.length} 組 CODE39 實體結構條碼`);
-      generateCardWallet(cardPairs);
+      // 改為【增量歷史疊加】，拍照後將新配對追加至記憶體，並呼叫 IndexedDB 永續存檔
+      globalCardPairs = [...globalCardPairs, ...cardPairs];
+      log(`本次成功配對出 ${cardPairs.length} 組條碼，總計整合卡包共 ${globalCardPairs.length} 張卡`);
+      
+      saveCardsToDB(cardPairs);
+      generateCardWallet(globalCardPairs);
     }
 
     function generateCardWallet(cardPairs) {
       walletCarousel.innerHTML = '';
       walletSection.style.display = 'block';
       walletIndicator.innerText = `共 ${cardPairs.length} 張卡片`;
+
+      // 萬級效能核心優化 1: 使用 DocumentFragment 減少 DOM 樹重繪造成的卡頓
+      const fragment = document.createDocumentFragment();
 
       cardPairs.forEach((pair, index) => {
         const cardDiv = document.createElement('div');
@@ -669,7 +754,7 @@
               <div class="mock-qr-label">掃碼看優惠▼</div>
             </div>
             <div class="card-mid-text">
-              ・本卡無使用期限，可分次及合併使用。本條碼於全台灣地區便利商店皆可兌換商品或折抵代收代售服務...
+              ・本卡無使用期限，可分次及合併使用...
               <br>・發行人：全家便利商店股份有限公司。
               <br>・卡片編號：2306024${cardNum}
             </div>
@@ -677,7 +762,6 @@
               禮物卡${pair.length === 2 ? '100' : '50'}元
             </div>
           </div>
-          
           <div class="barcodes-bottom-stack">
         `;
 
@@ -695,9 +779,10 @@
         html += `</div>`;
         cardDiv.innerHTML = html;
         cardDiv.addEventListener('click', () => openFullscreenOverlay(index));
-        walletCarousel.appendChild(cardDiv);
+        fragment.appendChild(cardDiv);
       });
 
+      walletCarousel.appendChild(fragment);
       renderAllBarcodesGraphics();
     }
 
@@ -705,24 +790,36 @@
       const currentPct = parseInt(widthSeekbar.value);
       const dynamicScale = Math.max(1.0, (currentPct / 82) * 1.15);
 
-      globalCardPairs.forEach((pair, index) => {
-        const cardNum = index + 1;
-        const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
+      let offset = 0;
+      const batchSize = 30; // 萬級效能核心優化 2: 每幀僅渲染 30 張卡片的條碼，徹底解決上千張 SVG 同時繪製導致手機核心崩潰
 
-        displayPair.forEach((barcode, bIndex) => {
-          const barcodeId = `#barcode-v12-${cardNum}-${bIndex}`;
-          if (!document.querySelector(barcodeId)) return;
-          try {
-            JsBarcode(barcodeId, barcode.value, {
-              format: "CODE39",        
-              width: dynamicScale, 
-              height: 26,
-              displayValue: false, 
-              margin: 0
-            });
-          } catch (e) { console.error(e); }
-        });
-      });
+      function renderBatch() {
+        const limit = Math.min(offset + batchSize, globalCardPairs.length);
+        for (let index = offset; index < limit; index++) {
+          const cardNum = index + 1;
+          const pair = globalCardPairs[index];
+          const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
+
+          displayPair.forEach((barcode, bIndex) => {
+            const barcodeId = `#barcode-v12-${cardNum}-${bIndex}`;
+            if (!document.querySelector(barcodeId)) return;
+            try {
+              JsBarcode(barcodeId, barcode.value, {
+                format: "CODE39",        
+                width: dynamicScale, 
+                height: 26,
+                displayValue: false, 
+                margin: 0
+              });
+            } catch (e) { console.error(e); }
+          });
+        }
+        offset += batchSize;
+        if (offset < globalCardPairs.length) {
+          requestAnimationFrame(renderBatch);
+        }
+      }
+      requestAnimationFrame(renderBatch);
     }
 
     function openFullscreenOverlay(targetIndex) {
