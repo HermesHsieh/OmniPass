@@ -369,7 +369,8 @@
   <div class="card">
     <div class="control-panel">
       <div style="display: flex; gap: 10px;">
-        <input type="file" id="file-input" accept="image/*,.heic,.heif" capture="environment" style="display: none;">
+        <!-- 已移除 capture 屬性，恢復雙工選單（相簿/相機自由選擇） -->
+        <input type="file" id="file-input" accept="image/*,.heic,.heif" style="display: none;">
         <button class="btn" id="upload-btn" disabled>上傳/拍照 卡片大合照</button>
         <button class="btn btn-danger" id="clear-db-btn">一鍵清空歷史卡包</button>
       </div>
@@ -471,7 +472,6 @@
     let globalCardPairs = [];
     let db = null;
 
-    // IndexedDB 配置參數
     const DB_NAME = 'BarcodeWalletDB';
     const DB_VERSION = 1;
     const STORE_NAME = 'cards';
@@ -484,7 +484,6 @@
       logPanel.scrollTop = logPanel.scrollHeight;
     }
 
-    // 初始化萬級沙盒 IndexedDB 資料庫
     function initDB() {
       return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -500,14 +499,12 @@
         request.onupgradeneeded = (e) => {
           const database = e.target.result;
           if (!database.objectStoreNames.contains(STORE_NAME)) {
-            // 自動遞增主鍵，用於儲存無上限卡片串列
             database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
           }
         };
       });
     }
 
-    // 從資料庫讀取卡片
     function loadCardsFromDB() {
       if (!db) return;
       const transaction = db.transaction([STORE_NAME], 'readonly');
@@ -525,7 +522,6 @@
       };
     }
 
-    // 增量儲存新掃描到的卡片到資料庫（避免覆蓋）
     function saveCardsToDB(newPairs) {
       if (!db || newPairs.length === 0) return;
       const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -540,7 +536,6 @@
       };
     }
 
-    // 一鍵刪除暫存按鈕事件
     clearDbBtn.addEventListener('click', () => {
       if (!confirm('確定要清空所有本地暫存的卡片嗎？此動作無法復原。')) return;
       if (!db) return;
@@ -572,7 +567,6 @@
         uploadBtn.disabled = false;
         log('🎉 CODE39 條碼間距真跡比對模組部署完畢！');
         
-        // Wasm 載入成功後，立刻啟動資料庫並還原歷史卡片
         await initDB();
         loadCardsFromDB();
       } catch (err) {
@@ -726,7 +720,6 @@
         } else { cardPairs.push([current]); }
       }
 
-      // 改為【增量歷史疊加】，拍照後將新配對追加至記憶體，並呼叫 IndexedDB 永續存檔
       globalCardPairs = [...globalCardPairs, ...cardPairs];
       log(`本次成功配對出 ${cardPairs.length} 組條碼，總計整合卡包共 ${globalCardPairs.length} 張卡`);
       
@@ -739,7 +732,6 @@
       walletSection.style.display = 'block';
       walletIndicator.innerText = `共 ${cardPairs.length} 張卡片`;
 
-      // 萬級效能核心優化 1: 使用 DocumentFragment 減少 DOM 樹重繪造成的卡頓
       const fragment = document.createDocumentFragment();
 
       cardPairs.forEach((pair, index) => {
@@ -791,7 +783,7 @@
       const dynamicScale = Math.max(1.0, (currentPct / 82) * 1.15);
 
       let offset = 0;
-      const batchSize = 30; // 萬級效能核心優化 2: 每幀僅渲染 30 張卡片的條碼，徹底解決上千張 SVG 同時繪製導致手機核心崩潰
+      const batchSize = 30;
 
       function renderBatch() {
         const limit = Math.min(offset + batchSize, globalCardPairs.length);
