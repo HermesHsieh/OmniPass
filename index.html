@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>商品卡條碼配對與模擬卡包 (GitHub Pages 版)</title>
+  <style>
+    :root {
+      --barcode-width: 82%;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 950px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f7;
+      color: #1d1d1f;
+      overflow-x: hidden;
+    }
+    h1 { font-size: 24px; text-align: center; margin-bottom: 5px; }
+    p.subtitle { text-align: center; color: #86868b; margin-top: 0; margin-bottom: 25px; }
+    
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    .control-panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .btn {
+      background-color: #0071e3;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    .btn:hover { background-color: #0077ed; }
+    .btn:disabled { background-color: #aeaeb2; cursor: not-allowed; }
+    
+    .filter-panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
+      background: #f5f5f7;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .filter-group label {
+      font-size: 12px;
+      font-weight: bold;
+      color: #86868b;
+    }
+    .filter-group input {
+      padding: 6px 10px;
+      border: 1px solid #d2d2d7;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .debug-control-group {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      background: #e5e5ea;
+      padding: 12px 15px;
+      border-radius: 8px;
+      margin-top: 5px;
+      align-items: center;
+    }
+    .seekbar-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 250px;
+    }
+    .seekbar-container input[type="range"] {
+      flex: 1;
+      cursor: pointer;
+    }
+    .seekbar-val {
+      font-weight: bold;
+      color: #0071e3;
+      min-width: 40px;
+    }
+    
+    .error-banner {
+      background-color: #ffebeb;
+      border-left: 6px solid #ff453a;
+      color: #d00;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    
+    .wallet-section {
+      margin-top: 30px;
+      display: none;
+    }
+    .wallet-carousel {
+      display: flex;
+      gap: 18px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding: 10px 5px 25px 5px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .wallet-carousel::-webkit-scrollbar { display: none; }
+    
+    .gift-card {
+      flex: 0 0 332px; 
+      height: 215px;   
+      background: linear-gradient(135deg, #ffffff 0%, #f5f5f7 100%);
+      color: #1d1d1f;
+      border: 1px solid #d2d2d7;
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+      scroll-snap-align: center;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: zoom-in;
+      transition: transform 0.2s;
+    }
+    .gift-card:active { transform: scale(0.98); }
+    
+    .card-top-layout {
+      display: flex;
+      height: 90px;
+      justify-content: space-between;
+      gap: 6px;
+      border-bottom: 1px dashed #d2d2d7;
+      padding-bottom: 6px;
+    }
+    
+    .mock-qr-section {
+      width: 65px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .mock-qr-box {
+      width: 48px;
+      height: 48px;
+      background: #1d1d1f;
+      border-radius: 4px;
+      position: relative;
+    }
+    .mock-qr-box::after {
+      content: "QR";
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .mock-qr-label {
+      font-size: 7px;
+      color: #86868b;
+      margin-top: 4px;
+      transform: scale(0.9);
+      white-space: nowrap;
+    }
+
+    .card-mid-text {
+      flex: 1;
+      font-size: 7px;
+      color: #6e6e73;
+      line-height: 1.2;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 6;
+      -webkit-box-orient: vertical;
+      padding: 2px;
+    }
+
+    .card-right-amount {
+      width: 22px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #1d1d1f;
+      border-left: 1px solid #e5e5ea;
+      padding-left: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      writing-mode: vertical-rl; 
+      letter-spacing: 1px;
+    }
+
+    .barcodes-bottom-stack {
+      width: var(--barcode-width);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column; 
+      gap: 5px;
+      padding-top: 2px;
+    }
+    
+    .barcode-row-container {
+      background: white;
+      padding: 4px 6px;
+      border: 1px solid #e5e5ea;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .barcode-row-container svg {
+      width: 100%;
+      height: 26px; 
+      display: block;
+    }
+    .barcode-row-label {
+      color: #1d1d1f;
+      font-size: 8px;
+      font-family: monospace;
+      font-weight: bold;
+      margin-top: 1px;
+      text-align: center;
+      letter-spacing: 0.5px;
+    }
+
+    .fullscreen-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background-color: rgba(0, 0, 0, 0.95);
+      z-index: 9999;
+      flex-direction: column;
+      justify-content: space-between;
+      box-sizing: border-box;
+      padding: 15px 0;
+    }
+    .overlay-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: white;
+      width: 100%;
+      padding: 0 20px;
+      box-sizing: border-box;
+      height: 50px;
+    }
+    .close-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none; color: white; font-size: 24px;
+      width: 44px; height: 44px; border-radius: 50%;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .brightness-tip {
+      font-size: 11px; background-color: #ff9500; color: black;
+      padding: 6px 10px; border-radius: 20px; font-weight: bold;
+    }
+    .overlay-carousel {
+      display: flex; width: 100vw; height: calc(100vh - 120px);
+      overflow-x: auto; scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      align-items: center;
+    }
+    .overlay-carousel::-webkit-scrollbar { display: none; }
+
+    .fullscreen-card {
+      flex: 0 0 100vw; height: 100%;
+      scroll-snap-align: center; display: grid;
+      place-items: center; box-sizing: border-box; padding: 20px;
+    }
+    
+    .fullscreen-card-content {
+      width: 100%;
+      max-width: 450px; 
+      aspect-ratio: 1.58 / 1;
+      background: white;
+      border-radius: 20px;
+      padding: 16px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+      color: black;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .fullscreen-barcodes-stack {
+      width: var(--barcode-width);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .fullscreen-barcode-box {
+      background: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #d2d2d7;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .fullscreen-barcode-box svg {
+      width: 100%;
+      height: 45px;
+    }
+    .fullscreen-barcode-text {
+      font-size: 11px;
+      font-weight: bold;
+      color: #1d1d1f;
+      margin-top: 2px;
+      font-family: monospace;
+    }
+
+    .high-contrast-mode { filter: contrast(1.1) brightness(1.03); }
+    .log-panel {
+      background-color: #1d1d1f; color: #30d158; font-family: monospace;
+      padding: 15px; border-radius: 8px; height: 130px;
+      overflow-y: auto; margin-top: 20px; font-size: 12px;
+    }
+  </style>
+  
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+</head>
+<body>
+
+  <h1>商品卡條碼配對與模擬卡包</h1>
+  <p class="subtitle">📸 實體卡細節還原 ・ 修正編碼圖案為 CODE39 粗細間距真跡版</p>
+
+  <div class="card" style="padding: 15px 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Wasm 辨識引擎狀態：<span id="engine-status" style="color:#ff9500; font-weight:bold;">初始化中...</span></span>
+      <span style="font-size: 12px; color: #86868b;">🔍 條碼圖案：已切換為 CODE39 格式</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="control-panel">
+      <div>
+        <input type="file" id="file-input" accept="image/*,.heic,.heif" style="display: none;">
+        <button class="btn" id="upload-btn" disabled>上傳卡片大合照</button>
+      </div>
+      <div style="font-size: 14px; color: #86868b;">
+        * 本地自動進行 2000px 等比縮小預防閃退
+      </div>
+    </div>
+
+    <div class="filter-panel">
+      <div class="filter-group">
+        <label for="filter-min-len">條碼最小長度 (字元數)</label>
+        <input type="number" id="filter-min-len" value="8" min="1">
+      </div>
+      <div class="filter-group">
+        <label for="filter-max-len">條碼最大長度 (字元數)</label>
+        <input type="number" id="filter-max-len" value="25" min="1">
+      </div>
+      <div class="filter-group" style="justify-content: center; flex-direction: row; align-items: center; gap: 8px; margin-top: 15px;">
+        <input type="checkbox" id="exclude-qrcode" checked style="width: auto; margin: 0;">
+        <label for="exclude-qrcode" style="font-size: 14px; color:#1d1d1f; cursor:pointer;">強制排除大合照 QR Code</label>
+      </div>
+
+      <div class="debug-control-group">
+        <div class="seekbar-container">
+          <label style="font-size: 13px; font-weight: bold; color: #1d1d1f;">📊 條碼在卡片上的寬度 Seekbar:</label>
+          <input type="range" id="width-seekbar" min="50" max="98" value="82">
+          <span class="seekbar-val" id="seekbar-val-display">82%</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" id="swap-barcode-switch" style="width: auto; cursor: pointer;">
+          <label for="swap-barcode-switch" style="font-size: 13px; font-weight: bold; color: #ff453a; cursor: pointer;">🔄 反轉對調上下條碼順序</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="error-banner" id="error-banner"></div>
+
+  <div class="wallet-section" id="wallet-section">
+    <h2 style="font-size: 18px; margin-left: 10px; display: flex; justify-content: space-between; align-items: center;">
+      <span>📱 模擬手機卡包 (3:2 實體圖案比例)</span>
+      <span id="wallet-indicator" style="font-size: 14px; color: #0071e3;"></span>
+    </h2>
+    <div class="wallet-carousel" id="wallet-carousel"></div>
+  </div>
+
+  <div class="fullscreen-overlay" id="fullscreen-overlay">
+    <div class="overlay-header">
+      <button class="close-btn" id="close-overlay-btn">✕</button>
+      <div class="brightness-tip">💡 建議手動將手機亮度調至最高</div>
+      <span style="color: white; font-size: 14px; font-weight: bold; width: 44px; text-align: right;" id="overlay-counter">1 / 1</span>
+    </div>
+    <div class="overlay-carousel" id="overlay-carousel"></div>
+    <div style="text-align: center; color: rgba(255,255,255,0.6); font-size: 13px; padding-bottom: 10px; font-weight: bold;">
+      ◀ 左右滑動切換卡片 ▶
+    </div>
+  </div>
+
+  <div class="card" style="padding: 10px;">
+    <details>
+      <summary style="cursor: pointer; font-weight: bold; color: #1d1d1f; padding: 5px;">展開/收合 原始影像實體定位 Debug 圖</summary>
+      <div id="visual-area" style="margin-top: 10px; background: #1d1d1f; min-height: 100px; display: flex; justify-content: center; align-items: center; overflow: auto;">
+        <canvas id="preview-canvas"></canvas>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h3>Debug Console 輸出日誌：</h3>
+    <div class="log-panel" id="log-panel"></div>
+  </div>
+
+  <script type="module">
+    const engineStatus = document.getElementById('engine-status');
+    const uploadBtn = document.getElementById('upload-btn');
+    const fileInput = document.getElementById('file-input');
+    const logPanel = document.getElementById('log-panel');
+    const errorBanner = document.getElementById('error-banner');
+    const walletSection = document.getElementById('wallet-section');
+    const walletCarousel = document.getElementById('wallet-carousel');
+    const walletIndicator = document.getElementById('wallet-indicator');
+
+    const filterMinLen = document.getElementById('filter-min-len');
+    const filterMaxLen = document.getElementById('filter-max-len');
+    const excludeQrCodeToggle = document.getElementById('exclude-qrcode');
+
+    const widthSeekbar = document.getElementById('width-seekbar');
+    const seekbarValDisplay = document.getElementById('seekbar-val-display');
+    const swapBarcodeSwitch = document.getElementById('swap-barcode-switch');
+
+    const previewCanvas = document.getElementById('preview-canvas');
+    const fullscreenOverlay = document.getElementById('fullscreen-overlay');
+    const closeOverlayBtn = document.getElementById('close-overlay-btn');
+    const overlayCarousel = document.getElementById('overlay-carousel');
+    const overlayCounter = document.getElementById('overlay-counter');
+
+    let zbarModule = null;
+    let globalCardPairs = [];
+
+    function log(message, type = 'info') {
+      const time = new Date().toLocaleTimeString();
+      let color = '#30d158';
+      if (type === 'error') color = '#ff453a';
+      logPanel.innerHTML += `<div style="color: ${color}">[${time}] ${message}</div>`;
+      logPanel.scrollTop = logPanel.scrollHeight;
+    }
+
+    async function initWasm() {
+      try {
+        log('正在載入 ZBar Wasm 引擎...');
+        const moduleUrl = 'https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/main.js';
+        zbarModule = await import(moduleUrl);
+        
+        const testCanvas = document.createElement('canvas');
+        testCanvas.width = 10; testCanvas.height = 10;
+        await zbarModule.scanImageData(testCanvas.getContext('2d').getImageData(0, 0, 10, 10));
+        
+        engineStatus.innerText = '已就緒 (CODE39 完美還原版)';
+        engineStatus.style.color = '#34c759';
+        uploadBtn.disabled = false;
+        log('🎉 CODE39 條碼間距真跡比對模組部署完畢！');
+      } catch (err) {
+        log(`❌ 初始化失敗: ${err.message}`, 'error');
+      }
+    }
+
+    widthSeekbar.addEventListener('input', (e) => {
+      const pct = e.target.value;
+      seekbarValDisplay.innerText = `${pct}%`;
+      document.documentElement.style.setProperty('--barcode-width', `${pct}%`);
+      if (globalCardPairs.length > 0) {
+        renderAllBarcodesGraphics();
+      }
+    });
+
+    swapBarcodeSwitch.addEventListener('change', () => {
+      if (globalCardPairs.length > 0) {
+        generateCardWallet(globalCardPairs);
+        if (fullscreenOverlay.style.display === 'flex') {
+          const currentIdx = parseInt(overlayCounter.innerText.split(' / ')[0]) - 1;
+          openFullscreenOverlay(currentIdx);
+        }
+      }
+    });
+
+    uploadBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async (e) => {
+      let file = e.target.files[0];
+      if (!file) return;
+
+      errorBanner.style.display = 'none';
+      walletSection.style.display = 'none';
+      walletCarousel.innerHTML = '';
+
+      let imageSrcUrl = URL.createObjectURL(file);
+      if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+        log('⚠️ iPhone HEIC 格式轉換中...');
+        try {
+          const jpegBlob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+          imageSrcUrl = URL.createObjectURL(jpegBlob);
+        } catch (err) { log(`轉檔失敗: ${err.message}`, 'error'); return; }
+      }
+
+      const img = new Image();
+      img.src = imageSrcUrl;
+      img.onload = async () => {
+        let w = img.width, h = img.height;
+        if (w > 2000 || h > 2000) {
+          if (w > h) { h = Math.round((h * 2000) / w); w = 2000; }
+          else { w = Math.round((w * 2000) / h); h = 2000; }
+        }
+        previewCanvas.width = w; previewCanvas.height = h;
+        const ctx = previewCanvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        try {
+          const symbols = await zbarModule.scanImageData(ctx.getImageData(0, 0, w, h));
+          processDetectedSymbols(symbols);
+        } catch (err) { log(`辨識錯誤: ${err.message}`, 'error'); }
+      };
+    });
+
+    function processDetectedSymbols(symbols) {
+      const minLen = parseInt(filterMinLen.value) || 0;
+      const maxLen = parseInt(filterMaxLen.value) || 999;
+      const excludeQr = excludeQrCodeToggle.checked;
+      let validItems = [];
+
+      symbols.forEach(sym => {
+        const type = sym.typeName;
+        const value = sym.decode ? sym.decode() : sym.rawData;
+        if (excludeQr && (type.includes('QR') || type.includes('DATA-MATRIX') || type === 'PDF417')) return;
+        if (value.length < minLen || value.length > maxLen) return;
+
+        const cx = sym.points.reduce((s, p) => s + p.x, 0) / sym.points.length;
+        const cy = sym.points.reduce((s, p) => s + p.y, 0) / sym.points.length;
+        validItems.push({ value, type, x: cx, y: cy });
+      });
+
+      if (validItems.length === 0) { showError('找不到符合規格的一維條碼'); return; }
+
+      const cardPairs = [];
+      const pool = [...validItems];
+      while (pool.length > 0) {
+        const current = pool.shift();
+        if (pool.length === 0) { cardPairs.push([current]); break; }
+        let bestIdx = -1, minDist = Infinity;
+        for (let j = 0; j < pool.length; j++) {
+          const dist = Math.sqrt(Math.pow(current.x - pool[j].x, 2) + Math.pow(current.y - pool[j].y, 2));
+          if (dist < minDist) { minDist = dist; bestIdx = j; }
+        }
+        if (bestIdx !== -1) {
+          const match = pool.splice(bestIdx, 1)[0];
+          const pair = [current, match];
+          pair.sort((a, b) => a.y - b.y); 
+          cardPairs.push(pair);
+        } else { cardPairs.push([current]); }
+      }
+
+      globalCardPairs = cardPairs;
+      log(`成功配對出 ${cardPairs.length} 組 CODE39 實體結構條碼`);
+      generateCardWallet(cardPairs);
+    }
+
+    function generateCardWallet(cardPairs) {
+      walletCarousel.innerHTML = '';
+      walletSection.style.display = 'block';
+      walletIndicator.innerText = `共 ${cardPairs.length} 張卡片`;
+
+      cardPairs.forEach((pair, index) => {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'gift-card';
+        const cardNum = index + 1;
+        
+        let html = `
+          <div class="card-top-layout">
+            <div class="mock-qr-section">
+              <div class="mock-qr-box"></div>
+              <div class="mock-qr-label">掃碼看優惠▼</div>
+            </div>
+            <div class="card-mid-text">
+              ・本卡無使用期限，可分次及合併使用。本條碼於全台灣地區便利商店皆可兌換商品或折抵代收代售服務...
+              <br>・發行人：全家便利商店股份有限公司。
+              <br>・卡片編號：2306024${cardNum}
+            </div>
+            <div class="card-right-amount">
+              禮物卡${pair.length === 2 ? '100' : '50'}元
+            </div>
+          </div>
+          
+          <div class="barcodes-bottom-stack">
+        `;
+
+        const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
+
+        displayPair.forEach((barcode, bIndex) => {
+          html += `
+            <div class="barcode-row-container">
+              <svg id="barcode-v12-${cardNum}-${bIndex}"></svg>
+              <div class="barcode-row-label">${barcode.value}</div>
+            </div>
+          `;
+        });
+
+        html += `</div>`;
+        cardDiv.innerHTML = html;
+        cardDiv.addEventListener('click', () => openFullscreenOverlay(index));
+        walletCarousel.appendChild(cardDiv);
+      });
+
+      renderAllBarcodesGraphics();
+    }
+
+    function renderAllBarcodesGraphics() {
+      const currentPct = parseInt(widthSeekbar.value);
+      const dynamicScale = Math.max(1.0, (currentPct / 82) * 1.15);
+
+      globalCardPairs.forEach((pair, index) => {
+        const cardNum = index + 1;
+        const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
+
+        displayPair.forEach((barcode, bIndex) => {
+          const barcodeId = `#barcode-v12-${cardNum}-${bIndex}`;
+          if (!document.querySelector(barcodeId)) return;
+          try {
+            JsBarcode(barcodeId, barcode.value, {
+              format: "CODE39",        
+              width: dynamicScale, 
+              height: 26,
+              displayValue: false, 
+              margin: 0
+            });
+          } catch (e) { console.error(e); }
+        });
+      });
+    }
+
+    function openFullscreenOverlay(targetIndex) {
+      overlayCarousel.innerHTML = '';
+      fullscreenOverlay.style.display = 'flex';
+      document.body.classList.add('high-contrast-mode'); 
+
+      const currentPct = parseInt(widthSeekbar.value);
+      const dynamicScaleFS = Math.max(1.4, (currentPct / 82) * 1.55);
+
+      globalCardPairs.forEach((pair, index) => {
+        const fullCard = document.createElement('div');
+        fullCard.className = 'fullscreen-card';
+        const cardNum = index + 1;
+        
+        let barcodeHtml = '';
+        const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
+
+        displayPair.forEach((barcode, bIndex) => {
+          barcodeHtml += `
+            <div class="fullscreen-barcode-box">
+              <svg id="full-v12-${cardNum}-${bIndex}"></svg>
+              <div class="fullscreen-barcode-text">${barcode.value}</div>
+            </div>
+          `;
+        });
+
+        fullCard.innerHTML = `
+          <div class="fullscreen-card-content">
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:#86868b; font-weight:bold; border-bottom:1px solid #f5f5f7; padding-bottom:4px;">
+              <span>💳 實體條碼真跡模擬 (第 ${cardNum} 張)</span>
+              <span>${swapBarcodeSwitch.checked ? '🔄 順序已對調' : ''}</span>
+            </div>
+            <div class="fullscreen-barcodes-stack">
+              ${barcodeHtml}
+            </div>
+            <div style="text-align:center; font-size:11px; color:#86868b; font-weight:bold;">◀ 左右滑動切換其他張卡片 ▶</div>
+          </div>
+        `;
+        overlayCarousel.appendChild(fullCard);
+
+        displayPair.forEach((barcode, bIndex) => {
+          try {
+            JsBarcode(`#full-v12-${cardNum}-${bIndex}`, barcode.value, {
+              format: "CODE39",       
+              width: dynamicScaleFS,  
+              height: 45,  
+              displayValue: false, 
+              margin: 0
+            });
+          } catch (e) { console.error(e); }
+        });
+      });
+
+      overlayCounter.innerText = `${targetIndex + 1} / ${globalCardPairs.length}`;
+      setTimeout(() => {
+        overlayCarousel.children[targetIndex]?.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
+      }, 50);
+    }
+
+    overlayCarousel.addEventListener('scroll', () => {
+      const idx = Math.round(overlayCarousel.scrollLeft / overlayCarousel.clientWidth);
+      if (idx >= 0 && idx < globalCardPairs.length) overlayCounter.innerText = `${idx + 1} / ${globalCardPairs.length}`;
+    });
+
+    closeOverlayBtn.addEventListener('click', () => {
+      fullscreenOverlay.style.display = 'none';
+      document.body.classList.remove('high-contrast-mode'); 
+    });
+
+    function showError(t) { errorBanner.innerText = `⚠️ ${t}`; errorBanner.style.display = 'block'; }
+
+    initWasm();
+  </script>
+</body>
+</html>
