@@ -344,7 +344,7 @@
     .high-contrast-mode { filter: contrast(1.1) brightness(1.03); }
     .log-panel {
       background-color: #1d1d1f; color: #30d158; font-family: monospace;
-      padding: 15px; border-radius: 8px; height: 130px;
+      padding: 15px; border-radius: 8px; height: 160px;
       overflow-y: auto; margin-top: 20px; font-size: 12px;
     }
   </style>
@@ -367,8 +367,9 @@
   <div class="card">
     <div class="control-panel">
       <div>
-        <input type="file" id="file-input" accept="image/*,.heic,.heif" style="display: none;">
-        <button class="btn" id="upload-btn" disabled>上傳卡片大合照</button>
+        <!-- 針對手機端優化：添加 capture="environment" 點擊可直接喚起後相機拍照 -->
+        <input type="file" id="file-input" accept="image/*,.heic,.heif" capture="environment" style="display: none;">
+        <button class="btn" id="upload-btn" disabled>上傳/拍照 卡片大合照</button>
       </div>
       <div style="font-size: 14px; color: #86868b;">
         * 本地自動進行 2000px 等比縮小預防閃退
@@ -426,7 +427,7 @@
   </div>
 
   <div class="card" style="padding: 10px;">
-    <details>
+    <details open> <!-- 預設展開以便手機即時查看畫布 -->
       <summary style="cursor: pointer; font-weight: bold; color: #1d1d1f; padding: 5px;">展開/收合 原始影像實體定位 Debug 圖</summary>
       <div id="visual-area" style="margin-top: 10px; background: #1d1d1f; min-height: 100px; display: flex; justify-content: center; align-items: center; overflow: auto;">
         <canvas id="preview-canvas"></canvas>
@@ -493,6 +494,59 @@
       }
     }
 
+    // 新增：影像底層像素級除錯分析函式
+    function runPixelLevelDebugger(ctx, w, h) {
+      log("🚨 ZBar 引擎未偵測到條碼，正在啟動像素級底層除錯診斷...", "error");
+      try {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        const pixelCount = data.length / 4;
+
+        let totalBrightness = 0;
+        let maxBright = 0;
+        let minBright = 255;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+          totalBrightness += gray;
+          if (gray > maxBright) maxBright = gray;
+          if (gray < minBright) minBright = gray;
+        }
+
+        const avgBrightness = totalBrightness / pixelCount;
+        const contrastPct = Math.round(((maxBright - minBright) / 255) * 100);
+
+        // 邊緣清晰度檢測 (拉普拉斯算子模擬)
+        let edgeScore = 0;
+        for (let y = 5; y < h - 5; y += 5) {
+          for (let x = 5; x < w - 5; x += 5) {
+            const idx = (y * w + x) * 4;
+            const rightIdx = (y * w + (x + 2)) * 4;
+            const curGray = 0.299 * data[idx] + 0.587 * data[idx+1] + 0.114 * data[idx+2];
+            const nextGray = 0.299 * data[rightIdx] + 0.587 * data[rightIdx+1] + 0.114 * data[rightIdx+2];
+            edgeScore += Math.abs(curGray - nextGray);
+          }
+        }
+        const blurScore = Math.round((edgeScore / (pixelCount / 25)) * 10);
+
+        // 將結果直接用 Error 顏色噴在手機日誌面板上
+        log(`📋 【診斷報告】`, 'error');
+        log(`🌓 圖片黑白對比度: ${contrastPct}% (建議 > 50%)`, contrastPct < 50 ? 'error' : 'info');
+        log(`🔍 邊緣銳利度得分: ${blurScore} (建議 > 200)`, blurScore < 200 ? 'error' : 'info');
+        log(`💡 平均環境亮度值: ${Math.round(avgBrightness)} (128為中庸)`, 'info');
+
+        if (blurScore < 200) {
+          log("💡 診斷結果：影像「嚴重模糊」或對焦失敗！即使拍照姿勢一樣，手機可能因為太靠近卡片而沒對到焦，請退後 5 公分再拍。", "error");
+        } else if (contrastPct < 50) {
+          log("💡 診斷結果：對比度不足！這批新商品卡可能有大面積反光白點，或者是環境光源太暗，請稍微傾斜手機斜拍避開日光燈反光。", "error");
+        } else {
+          log("💡 診斷結果：影像清晰且無大反光。可能是新商品卡的條碼規格不屬於系統設定的範圍，或字元長度超出過濾器的限制，請檢查上方的最大/最小長度設定。", "error");
+        }
+      } catch (e) {
+        log(`除錯分析器運作異常: ${e.message}`, 'error');
+      }
+    }
+
     widthSeekbar.addEventListener('input', (e) => {
       const pct = e.target.value;
       seekbarValDisplay.innerText = `${pct}%`;
@@ -545,12 +599,13 @@
 
         try {
           const symbols = await zbarModule.scanImageData(ctx.getImageData(0, 0, w, h));
-          processDetectedSymbols(symbols);
+          // 將畫布 ctx 傳遞進去，當找不到條碼時可以立刻提取像素分析
+          processDetectedSymbols(symbols, ctx, w, h);
         } catch (err) { log(`辨識錯誤: ${err.message}`, 'error'); }
       };
     });
 
-    function processDetectedSymbols(symbols) {
+    function processDetectedSymbols(symbols, ctx, w, h) {
       const minLen = parseInt(filterMinLen.value) || 0;
       const maxLen = parseInt(filterMaxLen.value) || 999;
       const excludeQr = excludeQrCodeToggle.checked;
@@ -567,7 +622,12 @@
         validItems.push({ value, type, x: cx, y: cy });
       });
 
-      if (validItems.length === 0) { showError('找不到符合規格的一維條碼'); return; }
+      if (validItems.length === 0) { 
+        showError('找不到符合規格的一維條碼'); 
+        // 觸發底層 Debug Console 噴出詳細數據
+        runPixelLevelDebugger(ctx, w, h);
+        return; 
+      }
 
       const cardPairs = [];
       const pool = [...validItems];
