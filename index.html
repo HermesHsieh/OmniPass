@@ -83,7 +83,7 @@
       animation: scan-move 2s infinite ease-in-out;
     }
 
-    /* 頂部計數面板 - 修正點 2: 獨立置頂 */
+    /* 頂部計數面板 */
     .scan-top-counter-banner {
       position: absolute;
       top: 12px; left: 12px; right: 12px;
@@ -100,7 +100,7 @@
       z-index: 10;
     }
 
-    /* 底部狀態面板 - 修正點 2: 獨立置底並加大空間防塞車 */
+    /* 底部狀態面板 */
     .scan-bottom-status-banner {
       position: absolute;
       bottom: 12px; left: 12px; right: 12px;
@@ -255,7 +255,7 @@
   <h1>商品卡超音速連續掃描器</h1>
   <p class="subtitle">🚀 視訊串流無感盲掃架顧 ・ 支援連續去重與自動語音反饋</p>
 
-  <!-- 鏡頭觀景窗與即時狀態區域 (UI 重構分離) -->
+  <!-- 鏡頭觀景窗與即時狀態區域 -->
   <div class="scanner-container" id="scanner-visual-block">
     <video id="video-stream" autoplay playsinline muted></video>
     
@@ -265,13 +265,11 @@
       </div>
     </div>
     
-    <!-- 修正點 2: 頂部專職顯示已掃描數量 -->
     <div class="scan-top-counter-banner">
       <span>📷 視訊掃描觀景窗</span>
       <span id="scan-counter" style="background:#34c759; padding:2px 10px; border-radius:10px; font-weight:bold;">已歸檔: 0 張</span>
     </div>
 
-    <!-- 修正點 2: 底部專職顯示動態狀態提示 -->
     <div class="scan-bottom-status-banner" id="scan-status-text">
       ⏸ 鏡頭尚未啟動
     </div>
@@ -309,7 +307,6 @@
           <span class="seekbar-val" id="seekbar-val-display">82%</span>
         </div>
         
-        <!-- 修正點 3: 新增秒數 Debug 控制滑桿 -->
         <div class="seekbar-container">
           <label style="font-size: 12px; font-weight: bold; color: #0071e3; min-width: 85px;">⏱ 去重冷卻時間:</label>
           <input type="range" id="cache-timeout-seekbar" min="5" max="50" value="25">
@@ -387,7 +384,7 @@
     let hiddenCanvas = document.createElement('canvas');
     let hiddenCtx = hiddenCanvas.getContext('2d');
 
-    // 暫時去重快取時間 (預設 2500ms，改為可動態調整)
+    // 暫時去重快取時間 Map (儲存 value -> 首次觸發時間戳)
     let recentScanCache = new Map(); 
     let currentCacheTimeout = 2500; 
 
@@ -483,7 +480,6 @@
       store.add({ pair, timestamp: Date.now() });
     }
 
-    // 修正點 1: 優化一鍵清空，不污染和中斷鏡頭執行的狀態變數
     clearDbBtn.addEventListener('click', () => {
       if (!confirm('確定要清空所有本地暫存的卡片嗎？')) return;
       if (!db) return;
@@ -491,11 +487,12 @@
       transaction.objectStore(STORE_NAME).clear();
       transaction.oncomplete = () => {
         globalCardPairs = [];
+        recentScanCache.clear();
+        singleBarcodeBuffer.clear();
         walletCarousel.innerHTML = '';
         walletSection.style.display = 'none';
         
         scanCounter.innerText = `已歸檔: 0 張`;
-        // 如果此時鏡頭開著，就保留原有的「請對準綠框」字樣，不干擾鏡頭流程
         if (isScanningActive) {
           scanStatusText.innerText = '🟢 卡包已清空，請將下一張條碼對準綠框';
         } else {
@@ -620,9 +617,11 @@
       const excludeQr = excludeQrCodeToggle.checked;
       const now = Date.now();
 
-      // 修正點 3: 使用動態調整的冷卻時間
+      // 【核心修復點】：先全面清理過期的冷卻快取，不影響任何後續判定
       for (let [code, time] of recentScanCache.entries()) {
-        if (now - time > currentCacheTimeout) recentScanCache.delete(code);
+        if (now - time > currentCacheTimeout) {
+          recentScanCache.delete(code);
+        }
       }
 
       let frameValidItems = [];
@@ -634,15 +633,19 @@
         if (excludeQr && (type.includes('QR') || type.includes('DATA-MATRIX') || type === 'PDF417')) continue;
         if (value.length < minLen || value.length > maxLen) continue;
         
+        // 如果這個條碼還在冷卻快取內，直接無視，且「絕對不要」重新塞值更新它的過期時間
         if (recentScanCache.has(value)) continue;
 
+        // 如果是已在庫的舊卡，提示警告，並給予一個固定的冷卻保護，避免警報聲密集轟炸
         if (isBarcodeDuplicate(value)) {
-          recentScanCache.set(value, now); 
-          playWarningSound();
-          triggerVibration([40, 40, 40]); 
-          scanStatusText.innerHTML = `⚠️ 條碼 <span style="color:#ff9500;font-weight:bold;">${value.substring(0,8)}...</span> 已在庫中`;
-          log(`⚠️ 偵測到重複卡片：條碼 [${value}] 已存在於手機卡包。`, 'warning');
-          return; 
+          if (!recentScanCache.has(value)) {
+            recentScanCache.set(value, now);
+            playWarningSound();
+            triggerVibration([40, 40, 40]); 
+            scanStatusText.innerHTML = `⚠️ 條碼 <span style="color:#ff9500;font-weight:bold;">${value.substring(0,8)}...</span> 已在庫中`;
+            log(`⚠️ 偵測到重複卡片：條碼 [${value}] 已存在於手機卡包。`, 'warning');
+          }
+          continue; 
         }
 
         const cx = sym.points.reduce((s, p) => s + p.x, 0) / sym.points.length;
@@ -650,18 +653,24 @@
         frameValidItems.push({ value, type, x: cx, y: cy });
       }
 
+      // 如果畫面中過濾後沒有有效的非重複、非冷卻條碼，就直接結束
       if (frameValidItems.length === 0) return;
 
+      // 狀況 A：一格畫面內同時抓到兩個有效條碼（完美的雙條碼卡片）
       if (frameValidItems.length >= 2) {
         let pair = [frameValidItems[0], frameValidItems[1]];
         pair.sort((a, b) => a.y - b.y);
+        
+        // 只有在即將寫入卡包時，才真正鎖定這兩個條碼的冷卻快取
         recentScanCache.set(pair[0].value, now);
         recentScanCache.set(pair[1].value, now);
         commitNewCard(pair);
       } 
+      // 狀況 B：一格畫面內只抓到單一條碼（可能手抖或角度問題，需要透過單條碼緩衝區湊對）
       else if (frameValidItems.length === 1) {
         const target = frameValidItems[0];
         let matchedPartner = null;
+        
         for (let [bufCode, bufItem] of singleBarcodeBuffer.entries()) {
           if (now - bufItem.time > 1500) {
             singleBarcodeBuffer.delete(bufCode);
@@ -678,6 +687,7 @@
         if (matchedPartner) {
           let pair = [target, matchedPartner];
           pair.sort((a, b) => a.y - b.y);
+          
           recentScanCache.set(pair[0].value, now);
           recentScanCache.set(pair[1].value, now);
           commitNewCard(pair);
@@ -854,10 +864,9 @@
       if (globalCardPairs.length > 0) renderAllBarcodesGraphics();
     });
 
-    // 修正點 3: 監聽去重冷卻時間控制滑桿
     cacheTimeoutSeekbar.addEventListener('input', (e) => {
       const val = parseInt(e.target.value);
-      currentCacheTimeout = val * 100; // 轉為毫秒 (5 = 500ms, 25 = 2500ms)
+      currentCacheTimeout = val * 100; // 5 = 500ms, 25 = 2500ms
       timeoutValDisplay.innerText = `${(val / 10).toFixed(1)}s`;
     });
 
