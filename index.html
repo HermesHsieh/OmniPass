@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>商品卡條碼連續掃描器與模擬卡包</title>
+  <title>商品卡超音速連續掃描器與模擬卡包</title>
   <style>
     :root {
       --barcode-width: 82%;
@@ -29,7 +29,7 @@
       margin-bottom: 15px;
     }
 
-    /* 視訊掃描區域設計 */
+    /* 視訊掃描區域 - 預設隱藏，消除未啟動時的緊迫與焦慮感 */
     .scanner-container {
       position: relative;
       width: 100%;
@@ -40,6 +40,9 @@
       overflow: hidden;
       box-shadow: 0 8px 24px rgba(0,0,0,0.15);
       aspect-ratio: 4 / 3;
+      display: none; /* 預設完全不顯示，由 JS 動態控制切換 */
+      opacity: 0;
+      transition: opacity 0.3s ease;
     }
     #video-stream {
       width: 100%;
@@ -62,7 +65,7 @@
       border: 2px solid rgba(255, 255, 255, 0.4);
       border-radius: 8px;
       position: relative;
-      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5); /* 遮罩效果 */
+      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
     }
     .scanner-target-box::before {
       content: '';
@@ -234,10 +237,10 @@
 <body>
 
   <h1>商品卡超音速連續掃描器</h1>
-  <p class="subtitle">🚀 視訊串流無感盲掃架構 ・ 支援連續去重與自動語音反饋</p>
+  <p class="subtitle">🚀 視訊串流無感盲掃架顧 ・ 支援連續去重與自動語音反饋</p>
 
-  <!-- 鏡頭觀景窗與即時狀態區域 -->
-  <div class="scanner-container">
+  <!-- 鏡頭觀景窗與即時狀態區域 (UI 動態收合) -->
+  <div class="scanner-container" id="scanner-visual-block">
     <video id="video-stream" autoplay playsinline muted></video>
     
     <div class="scanner-overlay">
@@ -246,13 +249,11 @@
       </div>
     </div>
     
-    <!-- 頂端狀態看板：直接引導使用者情境 -->
     <div class="scan-status-banner">
       <span id="scan-status-text">⏸ 鏡頭尚未啟動</span>
       <span id="scan-counter" style="background:#34c759; padding:2px 8px; border-radius:10px; font-weight:bold;">已歸檔: 0 張</span>
     </div>
 
-    <!-- 成功時的亮綠燈物理閃爍效果 -->
     <div class="scan-success-flash" id="flash-effect"></div>
   </div>
 
@@ -260,7 +261,7 @@
     <div class="control-panel">
       <div class="btn-group">
         <button class="btn btn-success" id="start-scan-btn" disabled>▶ 啟動視訊連續掃描</button>
-        <button class="btn" id="stop-scan-btn" style="background-color:#86868b; display:none;">⏸ 暫停鏡頭</button>
+        <button class="btn" id="stop-scan-btn" style="background-color:#86868b; display:none;">⏸ 關閉並暫停鏡頭</button>
         <button class="btn btn-danger" id="clear-db-btn" title="清空卡包">🧹 一鍵清空</button>
       </div>
     </div>
@@ -324,6 +325,7 @@
     const scanStatusText = document.getElementById('scan-status-text');
     const scanCounter = document.getElementById('scan-counter');
     const flashEffect = document.getElementById('flash-effect');
+    const scannerVisualBlock = document.getElementById('scanner-visual-block');
     
     const logPanel = document.getElementById('log-panel');
     const walletSection = document.getElementById('wallet-section');
@@ -350,49 +352,63 @@
     let isScanningActive = false;
     let scanAnimationFrameId = null;
 
-    // 用來存放處理即時串流所需的隱藏畫布
     let hiddenCanvas = document.createElement('canvas');
     let hiddenCtx = hiddenCanvas.getContext('2d');
 
-    // 核心快取池：防止同張卡片在 2.5 秒內被連續重複掃入
+    // 暫時去重快取 (防止同次對焦反覆觸發)
     let recentScanCache = new Map(); 
     const CACHE_TIMEOUT = 2500; 
 
-    // 用於保存「孤兒條碼（尚未成對）」的短暫緩衝區
+    // 孤兒條碼緩衝區
     let singleBarcodeBuffer = new Map();
 
     const DB_NAME = 'BarcodeWalletDB';
     const DB_VERSION = 1;
     const STORE_NAME = 'cards';
 
-    // 建立網頁原生音效暫存（免外部音檔，全平台相容）
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // 成功提示音
     function playBeepSound() {
       try {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(1200, audioCtx.currentTime); // 經典超商清脆高音
+        osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
         gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.12);
-      } catch (e) { console.log('音效播放失敗: ' + e.message); }
+      } catch (e) {}
     }
 
-    // 手機物理震動反饋
-    function triggerVibration() {
-      if (navigator.vibrate) {
-        navigator.vibrate(60); 
-      }
+    // 重複或錯誤提示音 (低沈兩聲警告)
+    function playWarningSound() {
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+      } catch (e) {}
+    }
+
+    function triggerVibration(pattern = 60) {
+      if (navigator.vibrate) { navigator.vibrate(pattern); }
     }
 
     function log(message, type = 'info') {
       const time = new Date().toLocaleTimeString();
       let color = '#30d158';
       if (type === 'error') color = '#ff453a';
+      if (type === 'warning') color = '#ff9500';
       logPanel.innerHTML += `<div style="color: ${color}">[${time}] ${message}</div>`;
       logPanel.scrollTop = logPanel.scrollHeight;
     }
@@ -437,17 +453,22 @@
       store.add({ pair, timestamp: Date.now() });
     }
 
+    // 修正點 1: 一鍵清空時同步重置計數面板數字為 0
     clearDbBtn.addEventListener('click', () => {
       if (!confirm('確定要清空所有本地暫存的卡片嗎？')) return;
       if (!db) return;
       const transaction = db.transaction([STORE_NAME], 'readwrite');
-      store = transaction.objectStore(STORE_NAME).clear();
+      transaction.objectStore(STORE_NAME).clear();
       transaction.oncomplete = () => {
         globalCardPairs = [];
         walletCarousel.innerHTML = '';
         walletSection.style.display = 'none';
+        
+        // 精準歸零面板
         scanCounter.innerText = `已歸檔: 0 張`;
-        log('🧹 卡包已完全清空！');
+        scanStatusText.innerText = `⏸ 歷史快取已全部清空`;
+        
+        log('🧹 卡包與歸檔計數器已完全清空重置！');
       };
     });
 
@@ -457,7 +478,6 @@
         const moduleUrl = 'https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/main.js';
         zbarModule = await import(moduleUrl);
         
-        // 引擎暖身測試
         const testCanvas = document.createElement('canvas');
         testCanvas.width = 10; testCanvas.height = 10;
         await zbarModule.scanImageData(testCanvas.getContext('2d').getImageData(0, 0, 10, 10));
@@ -472,31 +492,29 @@
       }
     }
 
-    // 啟動相機串流
+    // 修正點 2: 按下啟動時，動態打開 UI 元件，避免平日視覺焦慮
     async function startCamera() {
       if (localStream) { stopCamera(); }
       
+      // 展開 UI 元件並賦予平滑顯示
+      scannerVisualBlock.style.display = 'block';
+      setTimeout(() => { scannerVisualBlock.style.opacity = '1'; }, 20);
+      
       scanStatusText.innerText = '🔄 正在喚醒鏡頭...';
-      log('嘗試啟動手機後置深景深相機...');
 
       const constraints = {
-        video: {
-          facingMode: { exact: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
+        video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false
       };
 
       try {
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (e) {
-        log('無法直接取得後鏡頭，切換為常規相機模式...', 'error');
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
         } catch (err) {
           alert('無法開啟相機，請檢查瀏覽器隱私權限設定。');
-          scanStatusText.innerText = '❌ 相機啟動失敗';
+          scannerVisualBlock.style.display = 'none';
           return;
         }
       }
@@ -510,12 +528,11 @@
         startScanBtn.style.display = 'none';
         stopScanBtn.style.display = 'inline-block';
         scanStatusText.innerText = '🟢 請將商品卡條碼對準綠框';
-        log('🎥 視訊串流已就緒，開始進行毫秒級幀掃描。');
-        // 進入高速掃描循環
         scanAnimationFrameId = requestAnimationFrame(tickScanVideoFrame);
       };
     }
 
+    // 修正點 2: 按下暫停/關閉時，將動畫 UI 徹底收起來，眼不見為淨
     function stopCamera() {
       isScanningActive = false;
       if (scanAnimationFrameId) cancelAnimationFrame(scanAnimationFrameId);
@@ -526,105 +543,101 @@
       videoStream.srcObject = null;
       startScanBtn.style.display = 'inline-block';
       stopScanBtn.style.display = 'none';
-      scanStatusText.innerText = '⏸ 鏡頭已暫停';
+      
+      // 徹底隱藏焦慮的掃描框框
+      scannerVisualBlock.style.opacity = '0';
+      scannerVisualBlock.style.display = 'none';
+      log('⏸ 鏡頭已暫停，掃描動態線已卸載收合。');
     }
 
     startScanBtn.addEventListener('click', () => {
-      // 確保使用者互動後 AudioContext 處於解鎖狀態
       if (audioCtx.state === 'suspended') { audioCtx.resume(); }
       startCamera();
     });
     stopScanBtn.addEventListener('click', stopCamera);
 
-    // 核心毫秒級視訊幀分析循環
     async function tickScanVideoFrame() {
       if (!isScanningActive) return;
-
       if (videoStream.readyState === videoStream.HAVE_CURRENT_DATA || videoStream.readyState === videoStream.HAVE_ENOUGH_DATA) {
-        // 設定隱藏高效率分析畫布尺寸
         const width = videoStream.videoWidth;
         const height = videoStream.videoHeight;
         hiddenCanvas.width = width;
         hiddenCanvas.height = height;
-        
-        // 將當前影格繪入畫布
         hiddenCtx.drawImage(videoStream, 0, 0, width, height);
-
         try {
-          // 直接傳遞灰階像素 Memory 指標給 Wasm 核心，不作多餘轉換
           const imgData = hiddenCtx.getImageData(0, 0, width, height);
           const symbols = await zbarModule.scanImageData(imgData);
-          
           if (symbols && symbols.length > 0) {
             processLiveSymbols(symbols);
           }
-        } catch (err) {
-          // 靜默異常，防止單影格錯誤干擾連續掃描
-        }
+        } catch (err) {}
       }
-
-      // 保持高效循環
       if (isScanningActive) {
         scanAnimationFrameId = requestAnimationFrame(tickScanVideoFrame);
       }
     }
 
-    // 處理視訊掃描捕捉到的條碼
+    // 修正點 3: 檢查全庫，判斷條碼是否早已存在資料庫中
+    function isBarcodeDuplicate(value) {
+      return globalCardPairs.some(pair => 
+        pair.some(barcode => barcode.value.trim() === value.trim())
+      );
+    }
+
     function processLiveSymbols(symbols) {
       const minLen = parseInt(filterMinLen.value) || 0;
       const maxLen = parseInt(filterMaxLen.value) || 999;
       const excludeQr = excludeQrCodeToggle.checked;
       const now = Date.now();
 
-      // 清理快取池中超過 2.5 秒的舊條碼記錄
       for (let [code, time] of recentScanCache.entries()) {
         if (now - time > CACHE_TIMEOUT) recentScanCache.delete(code);
       }
 
       let frameValidItems = [];
 
-      symbols.forEach(sym => {
+      for (let sym of symbols) {
         const type = sym.typeName;
         const value = sym.decode ? sym.decode() : sym.rawData;
 
-        // 規則過濾
-        if (excludeQr && (type.includes('QR') || type.includes('DATA-MATRIX') || type === 'PDF417')) return;
-        if (value.length < minLen || value.length > maxLen) return;
+        if (excludeQr && (type.includes('QR') || type.includes('DATA-MATRIX') || type === 'PDF417')) continue;
+        if (value.length < minLen || value.length > maxLen) continue;
         
-        // 【連續去重防震】如果這個條碼在快取池中，代表剛剛才掃過它，直接跳過不理會
-        if (recentScanCache.has(value)) return;
+        // 瞬間快取去重
+        if (recentScanCache.has(value)) continue;
+
+        // 修正點 3: 全庫重複排除機制
+        if (isBarcodeDuplicate(value)) {
+          recentScanCache.set(value, now); // 扔進快取避免這幾秒內連續發出警報
+          playWarningSound();
+          triggerVibration([40, 40, 40]); // 連震三次警告
+          scanStatusText.innerHTML = `⚠️ 條碼 <span style="color:#ff9500;font-weight:bold;">${value.substring(0,8)}...</span> 已在庫中，已過濾`;
+          log(`⚠️ 偵測到重複卡片：條碼 [${value}] 已存在於手機卡包，放棄寫入。`, 'warning');
+          return; 
+        }
 
         const cx = sym.points.reduce((s, p) => s + p.x, 0) / sym.points.length;
         const cy = sym.points.reduce((s, p) => s + p.y, 0) / sym.points.length;
         frameValidItems.push({ value, type, x: cx, y: cy });
-      });
+      }
 
       if (frameValidItems.length === 0) return;
 
-      // 如果同一個影格裡抓到兩條條碼，直接判定成一對
       if (frameValidItems.length >= 2) {
-        // 取前兩個最靠近的進行配對
         let pair = [frameValidItems[0], frameValidItems[1]];
         pair.sort((a, b) => a.y - b.y);
-        
-        // 標記至去重快取池
         recentScanCache.set(pair[0].value, now);
         recentScanCache.set(pair[1].value, now);
-
         commitNewCard(pair);
       } 
-      // 如果影格裡只抓到一條條碼（可能另一半被手指擋住，或是鏡頭正在移動）
       else if (frameValidItems.length === 1) {
         const target = frameValidItems[0];
-        
-        // 檢查快取 buffer 中有沒有上一毫秒留下的孤兒條碼可以配對
         let matchedPartner = null;
         for (let [bufCode, bufItem] of singleBarcodeBuffer.entries()) {
           if (now - bufItem.time > 1500) {
-            singleBarcodeBuffer.delete(bufCode); // 超時移除
+            singleBarcodeBuffer.delete(bufCode);
             continue;
           }
-          // 如果距離很近且條碼不同，視為同一張卡片的上下條碼
           const dist = Math.sqrt(Math.pow(target.x - bufItem.x, 2) + Math.pow(target.y - bufItem.y, 2));
           if (dist < 350 && target.value !== bufItem.value) {
             matchedPartner = bufItem;
@@ -636,13 +649,10 @@
         if (matchedPartner) {
           let pair = [target, matchedPartner];
           pair.sort((a, b) => a.y - b.y);
-
           recentScanCache.set(pair[0].value, now);
           recentScanCache.set(pair[1].value, now);
-
           commitNewCard(pair);
         } else {
-          // 沒有配對成功，先放進孤兒緩衝區暫存 1.5 秒
           singleBarcodeBuffer.set(target.value, {
             value: target.value, type: target.type, x: target.x, y: target.y, time: now
           });
@@ -650,38 +660,29 @@
       }
     }
 
-    // 歸檔新卡片、觸發人類感知提示
     function commitNewCard(pair) {
       globalCardPairs.push(pair);
-
-      // 1. 本地資料庫異步寫入
       saveSinglePairToDB(pair);
 
-      // 2. 觸發頂層實體提示（物理閃爍、嗶聲、震動）
-      triggerVibration();
+      triggerVibration(60);
       playBeepSound();
       
       flashEffect.style.display = 'block';
       setTimeout(() => { flashEffect.style.display = 'none'; }, 180);
 
-      // 更新進度顯示與引導指令
       scanCounter.innerText = `已歸檔: ${globalCardPairs.length} 張`;
       scanStatusText.innerHTML = `🎉 成功入庫！條碼: <span style="color:#34c759;font-weight:bold;">${pair[0].value.substring(0,6)}...</span> 請換下一張`;
 
-      log(`⚡ 【嗶！】成功感應商品卡 (含 ${pair.length} 條碼) 並寫入歷史存儲。`);
-
-      // 3. 更新下方模擬卡包
+      log(`⚡ 【嗶！】成功感應商品卡 (條碼: ${pair[0].value}) 並寫入儲存庫。`);
       generateCardWallet(globalCardPairs);
     }
 
-    // 產生卡包介面
     function generateCardWallet(cardPairs) {
       walletCarousel.innerHTML = '';
       walletSection.style.display = 'block';
       walletIndicator.innerText = `共 ${cardPairs.length} 張卡片 (滑動檢視)`;
 
       const fragment = document.createDocumentFragment();
-
       cardPairs.forEach((pair, index) => {
         const cardDiv = document.createElement('div');
         cardDiv.className = 'gift-card';
@@ -704,7 +705,6 @@
         `;
 
         const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
-
         displayPair.forEach((barcode, bIndex) => {
           html += `
             <div class="barcode-row-container">
@@ -717,7 +717,6 @@
         html += `</div>`;
         cardDiv.innerHTML = html;
         cardDiv.addEventListener('click', () => {
-          // 看細節時建議先停下相機
           stopCamera();
           openFullscreenOverlay(index);
         });
@@ -731,7 +730,6 @@
     function renderAllBarcodesGraphics() {
       const currentPct = parseInt(widthSeekbar.value);
       const dynamicScale = Math.max(1.0, (currentPct / 82) * 1.15);
-
       let offset = 0;
       const batchSize = 25;
 
@@ -749,18 +747,15 @@
               JsBarcode(barcodeId, barcode.value, {
                 format: "CODE39", width: dynamicScale, height: 24, displayValue: false, margin: 0
               });
-            } catch (e) { console.error(e); }
+            } catch (e) {}
           });
         }
         offset += batchSize;
-        if (offset < globalCardPairs.length) {
-          requestAnimationFrame(renderBatch);
-        }
+        if (offset < globalCardPairs.length) { requestAnimationFrame(renderBatch); }
       }
       requestAnimationFrame(renderBatch);
     }
 
-    // 全螢幕燈箱細節展示
     function openFullscreenOverlay(targetIndex) {
       overlayCarousel.innerHTML = '';
       fullscreenOverlay.style.display = 'flex';
@@ -803,7 +798,7 @@
             JsBarcode(`#full-v12-${cardNum}-${bIndex}`, barcode.value, {
               format: "CODE39", width: dynamicScaleFS, height: 45, displayValue: false, margin: 0
             });
-          } catch (e) { console.error(e); }
+          } catch (e) {}
         });
       });
 
@@ -831,12 +826,9 @@
     });
 
     swapBarcodeSwitch.addEventListener('change', () => {
-      if (globalCardPairs.length > 0) {
-        generateCardWallet(globalCardPairs);
-      }
+      if (globalCardPairs.length > 0) generateCardWallet(globalCardPairs);
     });
 
-    // 啟動 Wasm 模組
     initWasmEngine();
   </script>
 </body>
