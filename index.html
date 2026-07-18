@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>商品卡超音速連續掃描器與模擬卡包</title>
+  <title>OmniPass 歐米通 | 超商商品卡數位卡包</title>
   <style>
     :root {
       --barcode-width: 82%;
+      --barcode-height-wallet: 24px;
+      --barcode-height-fullscreen: 45px;
     }
 
     body {
@@ -20,7 +22,7 @@
     }
     h1 { font-size: 22px; text-align: center; margin-bottom: 5px; }
     p.subtitle { text-align: center; color: #86868b; margin-top: 0; margin-bottom: 15px; font-size: 14px; }
-    
+
     .card {
       background: white;
       border-radius: 12px;
@@ -29,7 +31,6 @@
       margin-bottom: 15px;
     }
 
-    /* 視訊掃描區域 - 預設隱藏，消除未啟動時的緊迫與焦慮感 */
     .scanner-container {
       position: relative;
       width: 100%;
@@ -40,16 +41,11 @@
       overflow: hidden;
       box-shadow: 0 8px 24px rgba(0,0,0,0.15);
       aspect-ratio: 4 / 3;
-      display: none; /* 預設完全不顯示，由 JS 動態控制切換 */
+      display: none;
       opacity: 0;
       transition: opacity 0.3s ease;
     }
-    #video-stream {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    /* 掃描瞄準框與動態雷射線 */
+    #video-stream { width: 100%; height: 100%; object-fit: cover; }
     .scanner-overlay {
       position: absolute;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -60,8 +56,7 @@
       align-items: center;
     }
     .scanner-target-box {
-      width: 80%;
-      height: 40%;
+      width: 80%; height: 40%;
       border: 2px solid rgba(255, 255, 255, 0.4);
       border-radius: 8px;
       position: relative;
@@ -83,8 +78,6 @@
       top: 50%;
       animation: scan-move 2s infinite ease-in-out;
     }
-
-    /* 頂層即時提示面板 */
     .scan-status-banner {
       position: absolute;
       top: 12px; left: 12px; right: 12px;
@@ -99,6 +92,8 @@
       justify-content: space-between;
       align-items: center;
       z-index: 10;
+      flex-wrap: wrap;
+      gap: 6px;
     }
     .scan-success-flash {
       position: absolute;
@@ -109,24 +104,15 @@
       pointer-events: none;
     }
 
-    /* 控制面板 */
-    .control-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .btn-group {
-      display: flex;
-      gap: 10px;
-      width: 100%;
-    }
+    .control-panel { display: flex; flex-direction: column; gap: 12px; }
+    .btn-group { display: flex; gap: 10px; width: 100%; flex-wrap: wrap; }
     .btn {
       flex: 1;
       background-color: #0071e3;
       color: white;
       border: none;
       padding: 12px;
-      font-size: 16px;
+      font-size: 15px;
       border-radius: 8px;
       cursor: pointer;
       font-weight: bold;
@@ -135,11 +121,66 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+      min-width: 120px;
     }
     .btn:active { transform: scale(0.98); }
+    .btn:disabled { background-color: #aeaeb2; cursor: not-allowed; }
     .btn-success { background-color: #34c759; }
     .btn-danger { background-color: #ff453a; flex: 0 0 auto; padding: 12px 16px; }
-    
+    .btn-secondary { background-color: #86868b; }
+    .btn-sm { padding: 8px 12px; font-size: 13px; min-width: auto; flex: 0 0 auto; }
+
+    .scan-preset-panel {
+      background: #f5f5f7;
+      padding: 12px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .preset-label { font-size: 12px; font-weight: bold; color: #86868b; margin-bottom: 4px; }
+    .store-grid, .denom-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      padding: 8px 14px;
+      border-radius: 20px;
+      border: 2px solid #d2d2d7;
+      background: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chip.selected {
+      border-color: #0071e3;
+      background: #e8f2ff;
+      color: #0071e3;
+    }
+    .custom-denom-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .custom-denom-row input {
+      width: 80px;
+      padding: 6px 10px;
+      border: 1px solid #d2d2d7;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .scan-preset-summary {
+      font-size: 13px;
+      color: #1d1d1f;
+      background: #e8f2ff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
     .filter-panel {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -148,11 +189,7 @@
       padding: 12px;
       border-radius: 8px;
     }
-    .filter-group {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
+    .filter-group { display: flex; flex-direction: column; gap: 4px; }
     .filter-group label { font-size: 12px; font-weight: bold; color: #86868b; }
     .filter-group input { padding: 6px 10px; border: 1px solid #d2d2d7; border-radius: 6px; font-size: 14px; }
 
@@ -166,41 +203,74 @@
       border-radius: 8px;
       align-items: center;
     }
-    .seekbar-container { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px; }
+    .seekbar-container { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 200px; }
     .seekbar-container input[type="range"] { flex: 1; cursor: pointer; }
-    .seekbar-val { font-weight: bold; color: #0071e3; min-width: 40px; }
-    
-    /* 卡包樣式與全螢幕保持不變 */
-    .wallet-section { margin-top: 20px; display: none; }
+    .seekbar-val { font-weight: bold; color: #0071e3; min-width: 48px; font-size: 12px; }
+
+    .view-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .view-tab {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background: #e5e5ea;
+      font-weight: bold;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .view-tab.active { background: #0071e3; color: white; }
+
+    .wallet-section { margin-top: 10px; display: none; }
+    .wallet-header {
+      font-size: 16px;
+      margin: 0 5px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
     .wallet-carousel {
       display: flex; gap: 15px; overflow-x: auto; scroll-snap-type: x mandatory;
       padding: 5px 5px 20px 5px; -webkit-overflow-scrolling: touch;
     }
     .wallet-carousel::-webkit-scrollbar { display: none; }
-    
+
     .gift-card {
-      flex: 0 0 310px; height: 200px;   
+      flex: 0 0 310px; height: 210px;
       background: linear-gradient(135deg, #ffffff 0%, #f5f5f7 100%);
       color: #1d1d1f; border: 1px solid #d2d2d7; border-radius: 12px;
       padding: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
       scroll-snap-align: center; box-sizing: border-box;
       display: flex; flex-direction: column; justify-content: space-between; cursor: zoom-in;
     }
-    
-    .card-top-layout { display: flex; height: 80px; justify-content: space-between; gap: 5px; border-bottom: 1px dashed #d2d2d7; padding-bottom: 4px; }
-    .mock-qr-section { width: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .mock-qr-box { width: 44px; height: 44px; background: #1d1d1f; border-radius: 4px; position: relative; }
+    .gift-card.archived-style { opacity: 0.75; border-style: dashed; }
+
+    .card-top-layout { display: flex; height: 78px; justify-content: space-between; gap: 5px; border-bottom: 1px dashed #d2d2d7; padding-bottom: 4px; }
+    .mock-qr-section { width: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .mock-qr-box { width: 40px; height: 40px; background: #1d1d1f; border-radius: 4px; position: relative; }
     .mock-qr-box::after { content: "QR"; color: white; font-size: 9px; font-weight: bold; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
     .mock-qr-label { font-size: 7px; color: #86868b; margin-top: 2px; transform: scale(0.85); white-space: nowrap; }
     .card-mid-text { flex: 1; font-size: 7px; color: #6e6e73; line-height: 1.1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
-    .card-right-amount { width: 20px; font-size: 11px; font-weight: bold; color: #1d1d1f; border-left: 1px solid #e5e5ea; padding-left: 4px; display: flex; align-items: center; justify-content: center; text-align: center; writing-mode: vertical-rl; letter-spacing: 1px; }
+    .card-right-amount { width: 22px; font-size: 10px; font-weight: bold; color: #1d1d1f; border-left: 1px solid #e5e5ea; padding-left: 4px; display: flex; align-items: center; justify-content: center; text-align: center; writing-mode: vertical-rl; letter-spacing: 1px; }
+    .card-store-badge { font-size: 8px; color: #0071e3; font-weight: bold; margin-bottom: 2px; }
 
     .barcodes-bottom-stack { width: var(--barcode-width); margin: 0 auto; display: flex; flex-direction: column; gap: 4px; }
     .barcode-row-container { background: white; padding: 3px 5px; border: 1px solid #e5e5ea; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; box-sizing: border-box; }
-    .barcode-row-container svg { width: 100%; height: 24px; display: block; }
+    .barcode-row-container svg { width: 100%; height: var(--barcode-height-wallet); display: block; }
     .barcode-row-label { color: #1d1d1f; font-size: 8px; font-family: monospace; font-weight: bold; text-align: center; }
 
-    /* 全螢幕燈箱 */
+    .empty-state {
+      text-align: center;
+      color: #86868b;
+      padding: 30px 15px;
+      font-size: 14px;
+    }
+
     .fullscreen-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background-color: rgba(0, 0, 0, 0.95); z-index: 9999; flex-direction: column; justify-content: space-between; padding: 15px 0; box-sizing: border-box;
@@ -211,16 +281,31 @@
     .overlay-carousel { display: flex; width: 100vw; height: calc(100vh - 100px); overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; align-items: center; }
     .overlay-carousel::-webkit-scrollbar { display: none; }
     .fullscreen-card { flex: 0 0 100vw; height: 100%; scroll-snap-align: center; display: grid; place-items: center; box-sizing: border-box; padding: 15px; }
-    .fullscreen-card-content { width: 100%; max-width: 420px; aspect-ratio: 1.58 / 1; background: white; border-radius: 16px; padding: 14px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); color: black; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
+    .fullscreen-card-content { width: 100%; max-width: 420px; aspect-ratio: 1.58 / 1; background: white; border-radius: 16px; padding: 14px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); color: black; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; }
     .fullscreen-barcodes-stack { width: var(--barcode-width); margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
     .fullscreen-barcode-box { background: white; padding: 4px 8px; border-radius: 6px; border: 1px solid #d2d2d7; display: flex; flex-direction: column; align-items: center; width: 100%; box-sizing: border-box; }
-    .fullscreen-barcode-box svg { width: 100%; height: 42px; }
+    .fullscreen-barcode-box svg { width: 100%; height: var(--barcode-height-fullscreen); }
     .fullscreen-barcode-text { font-size: 11px; font-weight: bold; color: #1d1d1f; margin-top: 1px; font-family: monospace; }
+
+    .overlay-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-top: 6px;
+      border-top: 1px solid #f5f5f7;
+    }
+    .balance-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .balance-row input[type="range"] { flex: 1; }
+    .overlay-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
     .high-contrast-mode { filter: contrast(1.1) brightness(1.03); }
     .log-panel { background-color: #1d1d1f; color: #30d158; font-family: monospace; padding: 12px; border-radius: 8px; height: 120px; overflow-y: auto; margin-top: 15px; font-size: 11px; }
 
-    /* 動畫設定 */
     @keyframes scan-move {
       0% { top: 5%; }
       50% { top: 95%; }
@@ -231,38 +316,49 @@
       50% { opacity: 1; }
     }
   </style>
-  
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
 <body>
 
-  <h1>商品卡超音速連續掃描器</h1>
-  <p class="subtitle">🚀 視訊串流無感盲掃架顧 ・ 支援連續去重與自動語音反饋</p>
+  <h1>OmniPass 歐米通</h1>
+  <p class="subtitle">🚀 連續視訊掃描 ・ 四超商商品卡數位卡包</p>
 
-  <!-- 鏡頭觀景窗與即時狀態區域 (UI 動態收合) -->
   <div class="scanner-container" id="scanner-visual-block">
     <video id="video-stream" autoplay playsinline muted></video>
-    
     <div class="scanner-overlay">
-      <div class="scanner-target-box">
+      <div class="scanner-target-box" id="scanner-target-box">
         <div class="laser-line"></div>
       </div>
     </div>
-    
     <div class="scan-status-banner">
       <span id="scan-status-text">⏸ 鏡頭尚未啟動</span>
-      <span id="scan-counter" style="background:#34c759; padding:2px 8px; border-radius:10px; font-weight:bold;">已歸檔: 0 張</span>
+      <span id="scan-counter" style="background:#34c759; padding:2px 8px; border-radius:10px; font-weight:bold;">有效卡: 0 張</span>
     </div>
-
     <div class="scan-success-flash" id="flash-effect"></div>
   </div>
 
   <div class="card">
-    <div class="control-panel">
+    <div class="scan-preset-panel">
+      <div>
+        <div class="preset-label">① 選擇超商（掃描前設定）</div>
+        <div class="store-grid" id="store-grid"></div>
+      </div>
+      <div>
+        <div class="preset-label">② 選擇面額（元）</div>
+        <div class="denom-grid" id="denom-grid"></div>
+        <div class="custom-denom-row" style="margin-top:8px;">
+          <input type="number" id="custom-denom-input" placeholder="自訂" min="1" max="9999">
+          <button class="btn btn-sm btn-secondary" id="add-custom-denom-btn" type="button">＋ 新增面額</button>
+        </div>
+      </div>
+      <div class="scan-preset-summary" id="scan-preset-summary">請先選擇超商與面額</div>
+    </div>
+
+    <div class="control-panel" style="margin-top:12px;">
       <div class="btn-group">
         <button class="btn btn-success" id="start-scan-btn" disabled>▶ 啟動視訊連續掃描</button>
-        <button class="btn" id="stop-scan-btn" style="background-color:#86868b; display:none;">⏸ 關閉並暫停鏡頭</button>
-        <button class="btn btn-danger" id="clear-db-btn" title="清空卡包">🧹 一鍵清空</button>
+        <button class="btn btn-secondary" id="stop-scan-btn" style="display:none;">⏸ 關閉鏡頭</button>
+        <button class="btn btn-danger" id="clear-db-btn" title="清空所有卡片">🧹 一鍵清空</button>
       </div>
     </div>
 
@@ -279,12 +375,29 @@
         <input type="checkbox" id="exclude-qrcode" checked style="width: auto; margin: 0;">
         <label for="exclude-qrcode" style="font-size: 13px; color:#1d1d1f; cursor:pointer;">排除 QR Code</label>
       </div>
-
       <div class="debug-control-group">
         <div class="seekbar-container">
-          <label style="font-size: 12px; font-weight: bold; color: #1d1d1f;">📊 條碼顯示寬度:</label>
+          <label style="font-size: 12px; font-weight: bold;">📊 條碼寬度:</label>
           <input type="range" id="width-seekbar" min="50" max="98" value="82">
           <span class="seekbar-val" id="seekbar-val-display">82%</span>
+        </div>
+        <div class="seekbar-container">
+          <label style="font-size: 12px; font-weight: bold;">📏 卡包條碼高度:</label>
+          <input type="range" id="height-wallet-seekbar" min="16" max="48" value="24">
+          <span class="seekbar-val" id="height-wallet-display">24px</span>
+        </div>
+        <div class="seekbar-container">
+          <label style="font-size: 12px; font-weight: bold;">📏 全螢幕條碼高度:</label>
+          <input type="range" id="height-fullscreen-seekbar" min="28" max="80" value="45">
+          <span class="seekbar-val" id="height-fullscreen-display">45px</span>
+        </div>
+        <div class="filter-group" style="min-width:140px;">
+          <label for="scan-cooldown-ms">🧊 掃描成功 Cooldown (ms)</label>
+          <input type="number" id="scan-cooldown-ms" value="2500" min="500" max="10000" step="100">
+        </div>
+        <div class="filter-group" style="min-width:140px;">
+          <label for="scan-interval-ms">⏱ 掃描間隔 (ms)</label>
+          <input type="number" id="scan-interval-ms" value="150" min="50" max="1000" step="50">
         </div>
         <div style="display: flex; align-items: center; gap: 6px;">
           <input type="checkbox" id="swap-barcode-switch" style="width: auto; cursor: pointer;">
@@ -294,17 +407,22 @@
     </div>
   </div>
 
-  <div class="wallet-section" id="wallet-section">
-    <h2 style="font-size: 16px; margin-left: 5px; display: flex; justify-content: space-between; align-items: center;">
-      <span>📱 我的手機卡包 (自動同步 IndexedDB)</span>
+  <div class="card wallet-section" id="wallet-section">
+    <div class="view-tabs">
+      <button class="view-tab active" id="tab-wallet" type="button">📱 卡包</button>
+      <button class="view-tab" id="tab-archive" type="button">📦 封存（已用完）</button>
+    </div>
+    <div class="wallet-header">
+      <span id="wallet-title">我的手機卡包</span>
       <span id="wallet-indicator" style="font-size: 13px; color: #0071e3;"></span>
-    </h2>
+    </div>
     <div class="wallet-carousel" id="wallet-carousel"></div>
+    <div class="empty-state" id="empty-state" style="display:none;">尚無卡片</div>
   </div>
 
   <div class="fullscreen-overlay" id="fullscreen-overlay">
     <div class="overlay-header">
-      <button class="close-btn" id="close-overlay-btn">✕</button>
+      <button class="close-btn" id="close-overlay-btn" type="button">✕</button>
       <div class="brightness-tip">💡 建議將手機亮度調至最高</div>
       <span style="color: white; font-size: 13px; font-weight: bold; width: 44px; text-align: right;" id="overlay-counter">1 / 1</span>
     </div>
@@ -318,6 +436,20 @@
   </div>
 
   <script type="module">
+    const STORES = {
+      familymart: { name: '全家', format: 'CODE39' },
+      '711': { name: '7-ELEVEN', format: 'CODE128' },
+      hilife: { name: '萊爾富', format: 'CODE39' },
+      ok: { name: 'OK超商', format: 'CODE39' }
+    };
+    const DEFAULT_DENOMS = [35, 50, 100, 200];
+    const DEFAULT_FOLDER_ID = 'default';
+    const DB_NAME = 'BarcodeWalletDB';
+    const DB_VERSION = 2;
+    const STORE_CARDS = 'cards';
+    const STORE_FOLDERS = 'folders';
+    const STORE_SETTINGS = 'settings';
+
     const startScanBtn = document.getElementById('start-scan-btn');
     const stopScanBtn = document.getElementById('stop-scan-btn');
     const clearDbBtn = document.getElementById('clear-db-btn');
@@ -326,49 +458,65 @@
     const scanCounter = document.getElementById('scan-counter');
     const flashEffect = document.getElementById('flash-effect');
     const scannerVisualBlock = document.getElementById('scanner-visual-block');
-    
+    const storeGrid = document.getElementById('store-grid');
+    const denomGrid = document.getElementById('denom-grid');
+    const scanPresetSummary = document.getElementById('scan-preset-summary');
+    const customDenomInput = document.getElementById('custom-denom-input');
+    const addCustomDenomBtn = document.getElementById('add-custom-denom-btn');
+    const tabWallet = document.getElementById('tab-wallet');
+    const tabArchive = document.getElementById('tab-archive');
+    const walletTitle = document.getElementById('wallet-title');
     const logPanel = document.getElementById('log-panel');
     const walletSection = document.getElementById('wallet-section');
     const walletCarousel = document.getElementById('wallet-carousel');
     const walletIndicator = document.getElementById('wallet-indicator');
-
+    const emptyState = document.getElementById('empty-state');
     const filterMinLen = document.getElementById('filter-min-len');
     const filterMaxLen = document.getElementById('filter-max-len');
     const excludeQrCodeToggle = document.getElementById('exclude-qrcode');
-
     const widthSeekbar = document.getElementById('width-seekbar');
     const seekbarValDisplay = document.getElementById('seekbar-val-display');
+    const heightWalletSeekbar = document.getElementById('height-wallet-seekbar');
+    const heightWalletDisplay = document.getElementById('height-wallet-display');
+    const heightFullscreenSeekbar = document.getElementById('height-fullscreen-seekbar');
+    const heightFullscreenDisplay = document.getElementById('height-fullscreen-display');
+    const scanCooldownInput = document.getElementById('scan-cooldown-ms');
+    const scanIntervalInput = document.getElementById('scan-interval-ms');
     const swapBarcodeSwitch = document.getElementById('swap-barcode-switch');
-
     const fullscreenOverlay = document.getElementById('fullscreen-overlay');
     const closeOverlayBtn = document.getElementById('close-overlay-btn');
     const overlayCarousel = document.getElementById('overlay-carousel');
     const overlayCounter = document.getElementById('overlay-counter');
 
     let zbarModule = null;
-    let globalCardPairs = [];
     let db = null;
+    let allCards = [];
+    let customDenominations = [];
+    let scanOrderCounter = 0;
+    let selectedStore = 'familymart';
+    let selectedDenom = 100;
+    let currentView = 'wallet';
     let localStream = null;
     let isScanningActive = false;
     let scanAnimationFrameId = null;
+    let lastScanProcessTime = 0;
+    let scanCooldownUntil = 0;
+    let isProcessingFrame = false;
+    let overlayViewCards = [];
+    let pendingBalanceByCardId = new Map();
 
     let hiddenCanvas = document.createElement('canvas');
     let hiddenCtx = hiddenCanvas.getContext('2d');
-
-    // 暫時去重快取 (防止同次對焦反覆觸發)
-    let recentScanCache = new Map(); 
-    const CACHE_TIMEOUT = 2500; 
-
-    // 孤兒條碼緩衝區
+    let recentScanCache = new Map();
     let singleBarcodeBuffer = new Map();
 
-    const DB_NAME = 'BarcodeWalletDB';
-    const DB_VERSION = 1;
-    const STORE_NAME = 'cards';
-
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // 成功提示音
+
+    function getScanCooldown() { return parseInt(scanCooldownInput.value, 10) || 2500; }
+    function getScanInterval() { return parseInt(scanIntervalInput.value, 10) || 150; }
+    function getStoreFormat(store) { return STORES[store]?.format || 'CODE39'; }
+    function getStoreName(store) { return STORES[store]?.name || store; }
+
     function playBeepSound() {
       try {
         const osc = audioCtx.createOscillator();
@@ -384,7 +532,6 @@
       } catch (e) {}
     }
 
-    // 重複或錯誤提示音 (低沈兩聲警告)
     function playWarningSound() {
       try {
         const osc = audioCtx.createOscillator();
@@ -401,7 +548,7 @@
     }
 
     function triggerVibration(pattern = 60) {
-      if (navigator.vibrate) { navigator.vibrate(pattern); }
+      if (navigator.vibrate) navigator.vibrate(pattern);
     }
 
     function log(message, type = 'info') {
@@ -413,97 +560,284 @@
       logPanel.scrollTop = logPanel.scrollHeight;
     }
 
+    function activeCards() {
+      return allCards.filter(c => !c.archived && c.balance > 0);
+    }
+
+    function archivedCards() {
+      return allCards.filter(c => c.archived || c.balance === 0);
+    }
+
+    function getViewCards() {
+      return currentView === 'wallet' ? activeCards() : archivedCards();
+    }
+
+    function updateScanCounter() {
+      scanCounter.innerText = `有效卡: ${activeCards().length} 張`;
+    }
+
+    function updatePresetSummary() {
+      scanPresetSummary.innerText = `目前設定：${getStoreName(selectedStore)} ・ ${selectedDenom} 元 ・ ${getStoreFormat(selectedStore)}`;
+    }
+
+    function renderStoreChips() {
+      storeGrid.innerHTML = '';
+      Object.entries(STORES).forEach(([id, info]) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip' + (selectedStore === id ? ' selected' : '');
+        chip.textContent = info.name;
+        chip.addEventListener('click', () => {
+          selectedStore = id;
+          renderStoreChips();
+          updatePresetSummary();
+        });
+        storeGrid.appendChild(chip);
+      });
+    }
+
+    function allDenominations() {
+      const set = new Set([...DEFAULT_DENOMS, ...customDenominations]);
+      return [...set].sort((a, b) => a - b);
+    }
+
+    function renderDenomChips() {
+      denomGrid.innerHTML = '';
+      allDenominations().forEach(d => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip' + (selectedDenom === d ? ' selected' : '');
+        chip.textContent = `${d} 元`;
+        chip.addEventListener('click', () => {
+          selectedDenom = d;
+          renderDenomChips();
+          updatePresetSummary();
+        });
+        denomGrid.appendChild(chip);
+      });
+    }
+
+    async function saveSetting(key, value) {
+      if (!db) return;
+      const tx = db.transaction([STORE_SETTINGS], 'readwrite');
+      tx.objectStore(STORE_SETTINGS).put({ key, value });
+    }
+
+    async function loadSettings() {
+      if (!db) return;
+      return new Promise(resolve => {
+        const tx = db.transaction([STORE_SETTINGS], 'readonly');
+        const req = tx.objectStore(STORE_SETTINGS).getAll();
+        req.onsuccess = () => {
+          (req.result || []).forEach(({ key, value }) => {
+            if (key === 'customDenominations') customDenominations = value;
+            if (key === 'scanCooldownMs') scanCooldownInput.value = value;
+            if (key === 'scanIntervalMs') scanIntervalInput.value = value;
+            if (key === 'selectedStore') selectedStore = value;
+            if (key === 'selectedDenom') selectedDenom = value;
+          });
+          resolve();
+        };
+      });
+    }
+
     function initDB() {
       return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = (e) => { reject(e); };
-        request.onsuccess = (e) => {
-          db = e.target.result;
-          log('📦 本地 IndexedDB 萬張級資料庫架構就緒。');
-          resolve(db);
-        };
+        request.onerror = () => reject(request.error);
         request.onupgradeneeded = (e) => {
           const database = e.target.result;
-          if (!database.objectStoreNames.contains(STORE_NAME)) {
-            database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+          const oldVersion = e.oldVersion;
+
+          if (!database.objectStoreNames.contains(STORE_CARDS)) {
+            database.createObjectStore(STORE_CARDS, { keyPath: 'id', autoIncrement: true });
           }
+          if (!database.objectStoreNames.contains(STORE_FOLDERS)) {
+            const folderStore = database.createObjectStore(STORE_FOLDERS, { keyPath: 'id' });
+            folderStore.add({ id: DEFAULT_FOLDER_ID, name: 'default', isDefault: true });
+          }
+          if (!database.objectStoreNames.contains(STORE_SETTINGS)) {
+            database.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
+          }
+
+          if (oldVersion === 1 && oldVersion < DB_VERSION) {
+            const tx = e.target.transaction;
+            const cardStore = tx.objectStore(STORE_CARDS);
+            const getAllReq = cardStore.getAll();
+            getAllReq.onsuccess = () => {
+              const oldCards = getAllReq.result || [];
+              oldCards.forEach((item, idx) => {
+                if (item.store !== undefined) return;
+                cardStore.put({
+                  id: item.id,
+                  pair: item.pair,
+                  store: 'familymart',
+                  denomination: 100,
+                  balance: 100,
+                  folderId: DEFAULT_FOLDER_ID,
+                  archived: false,
+                  scanOrder: idx + 1,
+                  barcodeFormat: 'CODE39',
+                  timestamp: item.timestamp || Date.now()
+                });
+              });
+            };
+          }
+        };
+        request.onsuccess = (e) => {
+          db = e.target.result;
+          log('📦 IndexedDB v2 就緒（cards / folders / settings）。');
+          resolve(db);
         };
       });
     }
 
     function loadCardsFromDB() {
+      if (!db) return Promise.resolve();
+      return new Promise(resolve => {
+        const tx = db.transaction([STORE_CARDS], 'readonly');
+        const req = tx.objectStore(STORE_CARDS).getAll();
+        req.onsuccess = () => {
+          allCards = (req.result || []).map(c => {
+            const store = c.store || 'familymart';
+            const denomination = c.denomination || 100;
+            const balance = c.balance ?? denomination;
+            const archived = c.archived ?? (balance === 0);
+            return {
+              ...c,
+              store,
+              denomination,
+              balance,
+              folderId: c.folderId || DEFAULT_FOLDER_ID,
+              archived: archived || balance === 0,
+              scanOrder: c.scanOrder || 0,
+              barcodeFormat: c.barcodeFormat || getStoreFormat(store)
+            };
+          }).sort((a, b) => a.scanOrder - b.scanOrder);
+          scanOrderCounter = allCards.reduce((max, c) => Math.max(max, c.scanOrder || 0), 0);
+          log(`已還原 ${allCards.length} 張卡片（有效 ${activeCards().length} / 封存 ${archivedCards().length}）。`);
+          updateScanCounter();
+          renderWallet();
+          resolve();
+        };
+      });
+    }
+
+    function ensureDefaultFolder() {
       if (!db) return;
-      const transaction = db.transaction([STORE_NAME], 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.getAll();
-      request.onsuccess = () => {
-        if (request.result && request.result.length > 0) {
-          globalCardPairs = request.result.map(item => item.pair);
-          log(`已從資料庫還原 ${globalCardPairs.length} 張卡片記錄。`);
-          scanCounter.innerText = `已歸檔: ${globalCardPairs.length} 張`;
-          generateCardWallet(globalCardPairs);
+      const tx = db.transaction([STORE_FOLDERS], 'readwrite');
+      const store = tx.objectStore(STORE_FOLDERS);
+      store.get(DEFAULT_FOLDER_ID).onsuccess = (e) => {
+        if (!e.target.result) {
+          store.put({ id: DEFAULT_FOLDER_ID, name: 'default', isDefault: true });
         }
       };
     }
 
-    function saveSinglePairToDB(pair) {
-      if (!db) return;
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      store.add({ pair, timestamp: Date.now() });
+    function saveCardToDB(card) {
+      if (!db) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction([STORE_CARDS], 'readwrite');
+        const req = card.id ? tx.objectStore(STORE_CARDS).put(card) : tx.objectStore(STORE_CARDS).add(card);
+        req.onsuccess = () => {
+          if (!card.id) card.id = req.result;
+          resolve(card);
+        };
+        req.onerror = () => reject(req.error);
+      });
     }
 
-    // 修正點 1: 一鍵清空時同步重置計數面板數字為 0
+    function deleteCardFromDB(id) {
+      if (!db) return Promise.resolve();
+      return new Promise(resolve => {
+        const tx = db.transaction([STORE_CARDS], 'readwrite');
+        tx.objectStore(STORE_CARDS).delete(id);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
     clearDbBtn.addEventListener('click', () => {
-      if (!confirm('確定要清空所有本地暫存的卡片嗎？')) return;
+      if (!confirm('確定要清空所有卡片（含封存）嗎？')) return;
       if (!db) return;
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      transaction.objectStore(STORE_NAME).clear();
-      transaction.oncomplete = () => {
-        globalCardPairs = [];
+      const tx = db.transaction([STORE_CARDS], 'readwrite');
+      tx.objectStore(STORE_CARDS).clear();
+      tx.oncomplete = () => {
+        allCards = [];
+        scanOrderCounter = 0;
         walletCarousel.innerHTML = '';
+        emptyState.style.display = 'block';
         walletSection.style.display = 'none';
-        
-        // 精準歸零面板
-        scanCounter.innerText = `已歸檔: 0 張`;
-        scanStatusText.innerText = `⏸ 歷史快取已全部清空`;
-        
-        log('🧹 卡包與歸檔計數器已完全清空重置！');
+        updateScanCounter();
+        scanStatusText.innerText = '⏸ 歷史快取已全部清空';
+        log('🧹 所有卡片已清空。');
       };
     });
 
+    addCustomDenomBtn.addEventListener('click', () => {
+      const val = parseInt(customDenomInput.value, 10);
+      if (!val || val < 1) { alert('請輸入有效面額'); return; }
+      if (!customDenominations.includes(val)) {
+        customDenominations.push(val);
+        customDenominations.sort((a, b) => a - b);
+        saveSetting('customDenominations', customDenominations);
+      }
+      selectedDenom = val;
+      customDenomInput.value = '';
+      renderDenomChips();
+      updatePresetSummary();
+      log(`➕ 已新增自訂面額 ${val} 元`);
+    });
+
+    tabWallet.addEventListener('click', () => {
+      currentView = 'wallet';
+      tabWallet.classList.add('active');
+      tabArchive.classList.remove('active');
+      walletTitle.innerText = '📱 我的手機卡包';
+      renderWallet();
+    });
+
+    tabArchive.addEventListener('click', () => {
+      currentView = 'archive';
+      tabArchive.classList.add('active');
+      tabWallet.classList.remove('active');
+      walletTitle.innerText = '📦 封存（餘額已用完）';
+      renderWallet();
+    });
+
+    scanCooldownInput.addEventListener('change', () => saveSetting('scanCooldownMs', getScanCooldown()));
+    scanIntervalInput.addEventListener('change', () => saveSetting('scanIntervalMs', getScanInterval()));
+
     async function initWasmEngine() {
       try {
-        log('正在載入核心解碼晶片 (ZBar Wasm)...');
-        const moduleUrl = 'https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/main.js';
-        zbarModule = await import(moduleUrl);
-        
+        log('正在載入 ZBar Wasm 引擎...');
+        zbarModule = await import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/main.js');
         const testCanvas = document.createElement('canvas');
         testCanvas.width = 10; testCanvas.height = 10;
         await zbarModule.scanImageData(testCanvas.getContext('2d').getImageData(0, 0, 10, 10));
-        
         startScanBtn.disabled = false;
-        log('🎉 解碼引擎初始化成功！已解鎖超商級連續視訊掃描。');
-        
+        log('🎉 解碼引擎就緒。');
         await initDB();
-        loadCardsFromDB();
+        ensureDefaultFolder();
+        await loadSettings();
+        renderStoreChips();
+        renderDenomChips();
+        updatePresetSummary();
+        await loadCardsFromDB();
       } catch (err) {
         log(`❌ 引擎載入失敗: ${err.message}`, 'error');
       }
     }
 
-    // 修正點 2: 按下啟動時，動態打開 UI 元件，避免平日視覺焦慮
     async function startCamera() {
-      if (localStream) { stopCamera(); }
-      
-      // 展開 UI 元件並賦予平滑顯示
+      if (localStream) stopCamera();
       scannerVisualBlock.style.display = 'block';
       setTimeout(() => { scannerVisualBlock.style.opacity = '1'; }, 20);
-      
       scanStatusText.innerText = '🔄 正在喚醒鏡頭...';
+      saveSetting('selectedStore', selectedStore);
+      saveSetting('selectedDenom', selectedDenom);
 
       const constraints = {
-        video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false
       };
 
@@ -511,9 +845,9 @@
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (e) {
         try {
-          localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+          localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
         } catch (err) {
-          alert('無法開啟相機，請檢查瀏覽器隱私權限設定。');
+          alert('無法開啟相機，請檢查瀏覽器權限。');
           scannerVisualBlock.style.display = 'none';
           return;
         }
@@ -521,99 +855,115 @@
 
       videoStream.srcObject = localStream;
       videoStream.setAttribute('playsinline', true);
-      
       videoStream.onloadedmetadata = () => {
         videoStream.play();
         isScanningActive = true;
+        lastScanProcessTime = 0;
         startScanBtn.style.display = 'none';
         stopScanBtn.style.display = 'inline-block';
-        scanStatusText.innerText = '🟢 請將商品卡條碼對準綠框';
+        scanStatusText.innerText = `🟢 ${getStoreName(selectedStore)} ${selectedDenom}元 — 對準綠框掃描`;
         scanAnimationFrameId = requestAnimationFrame(tickScanVideoFrame);
       };
     }
 
-    // 修正點 2: 按下暫停/關閉時，將動畫 UI 徹底收起來，眼不見為淨
     function stopCamera() {
       isScanningActive = false;
       if (scanAnimationFrameId) cancelAnimationFrame(scanAnimationFrameId);
       if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+        localStream.getTracks().forEach(t => t.stop());
         localStream = null;
       }
       videoStream.srcObject = null;
       startScanBtn.style.display = 'inline-block';
       stopScanBtn.style.display = 'none';
-      
-      // 徹底隱藏焦慮的掃描框框
       scannerVisualBlock.style.opacity = '0';
       scannerVisualBlock.style.display = 'none';
-      log('⏸ 鏡頭已暫停，掃描動態線已卸載收合。');
+      log('⏸ 鏡頭已暫停。');
     }
 
     startScanBtn.addEventListener('click', () => {
-      if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
       startCamera();
     });
     stopScanBtn.addEventListener('click', stopCamera);
 
-    async function tickScanVideoFrame() {
-      if (!isScanningActive) return;
-      if (videoStream.readyState === videoStream.HAVE_CURRENT_DATA || videoStream.readyState === videoStream.HAVE_ENOUGH_DATA) {
-        const width = videoStream.videoWidth;
-        const height = videoStream.videoHeight;
-        hiddenCanvas.width = width;
-        hiddenCanvas.height = height;
-        hiddenCtx.drawImage(videoStream, 0, 0, width, height);
-        try {
-          const imgData = hiddenCtx.getImageData(0, 0, width, height);
-          const symbols = await zbarModule.scanImageData(imgData);
-          if (symbols && symbols.length > 0) {
-            processLiveSymbols(symbols);
-          }
-        } catch (err) {}
-      }
-      if (isScanningActive) {
-        scanAnimationFrameId = requestAnimationFrame(tickScanVideoFrame);
-      }
+    function extractRoiImageData() {
+      const vw = videoStream.videoWidth;
+      const vh = videoStream.videoHeight;
+      if (!vw || !vh) return null;
+
+      hiddenCanvas.width = vw;
+      hiddenCanvas.height = vh;
+      hiddenCtx.drawImage(videoStream, 0, 0, vw, vh);
+
+      const roiW = Math.floor(vw * 0.8);
+      const roiH = Math.floor(vh * 0.4);
+      const roiX = Math.floor((vw - roiW) / 2);
+      const roiY = Math.floor((vh - roiH) / 2);
+      return hiddenCtx.getImageData(roiX, roiY, roiW, roiH);
     }
 
-    // 修正點 3: 檢查全庫，判斷條碼是否早已存在資料庫中
+    async function tickScanVideoFrame() {
+      if (!isScanningActive) return;
+
+      const now = Date.now();
+      if (now < scanCooldownUntil || isProcessingFrame) {
+        scanAnimationFrameId = requestAnimationFrame(tickScanVideoFrame);
+        return;
+      }
+      if (now - lastScanProcessTime < getScanInterval()) {
+        scanAnimationFrameId = requestAnimationFrame(tickScanVideoFrame);
+        return;
+      }
+
+      if (videoStream.readyState >= videoStream.HAVE_CURRENT_DATA) {
+        isProcessingFrame = true;
+        lastScanProcessTime = now;
+        try {
+          const imgData = extractRoiImageData();
+          if (imgData) {
+            const symbols = await zbarModule.scanImageData(imgData);
+            if (symbols && symbols.length > 0) processLiveSymbols(symbols);
+          }
+        } catch (err) {}
+        isProcessingFrame = false;
+      }
+
+      if (isScanningActive) scanAnimationFrameId = requestAnimationFrame(tickScanVideoFrame);
+    }
+
     function isBarcodeDuplicate(value) {
-      return globalCardPairs.some(pair => 
-        pair.some(barcode => barcode.value.trim() === value.trim())
+      return allCards.some(c =>
+        c.pair.some(b => b.value.trim() === value.trim())
       );
     }
 
     function processLiveSymbols(symbols) {
-      const minLen = parseInt(filterMinLen.value) || 0;
-      const maxLen = parseInt(filterMaxLen.value) || 999;
+      const minLen = parseInt(filterMinLen.value, 10) || 0;
+      const maxLen = parseInt(filterMaxLen.value, 10) || 999;
       const excludeQr = excludeQrCodeToggle.checked;
       const now = Date.now();
+      const cacheTimeout = getScanCooldown();
 
-      for (let [code, time] of recentScanCache.entries()) {
-        if (now - time > CACHE_TIMEOUT) recentScanCache.delete(code);
+      for (const [code, time] of recentScanCache.entries()) {
+        if (now - time > cacheTimeout) recentScanCache.delete(code);
       }
 
-      let frameValidItems = [];
-
-      for (let sym of symbols) {
+      const frameValidItems = [];
+      for (const sym of symbols) {
         const type = sym.typeName;
         const value = sym.decode ? sym.decode() : sym.rawData;
-
         if (excludeQr && (type.includes('QR') || type.includes('DATA-MATRIX') || type === 'PDF417')) continue;
         if (value.length < minLen || value.length > maxLen) continue;
-        
-        // 瞬間快取去重
         if (recentScanCache.has(value)) continue;
 
-        // 修正點 3: 全庫重複排除機制
         if (isBarcodeDuplicate(value)) {
-          recentScanCache.set(value, now); // 扔進快取避免這幾秒內連續發出警報
+          recentScanCache.set(value, now);
           playWarningSound();
-          triggerVibration([40, 40, 40]); // 連震三次警告
-          scanStatusText.innerHTML = `⚠️ 條碼 <span style="color:#ff9500;font-weight:bold;">${value.substring(0,8)}...</span> 已在庫中，已過濾`;
-          log(`⚠️ 偵測到重複卡片：條碼 [${value}] 已存在於手機卡包，放棄寫入。`, 'warning');
-          return; 
+          triggerVibration([40, 40, 40]);
+          scanStatusText.innerHTML = `⚠️ 條碼 <span style="color:#ff9500;font-weight:bold;">${value.substring(0, 8)}...</span> 已在庫中`;
+          log(`⚠️ 重複卡片：[${value}]`, 'warning');
+          return;
         }
 
         const cx = sym.points.reduce((s, p) => s + p.x, 0) / sym.points.length;
@@ -624,209 +974,360 @@
       if (frameValidItems.length === 0) return;
 
       if (frameValidItems.length >= 2) {
-        let pair = [frameValidItems[0], frameValidItems[1]];
-        pair.sort((a, b) => a.y - b.y);
+        const pair = [frameValidItems[0], frameValidItems[1]].sort((a, b) => a.y - b.y);
         recentScanCache.set(pair[0].value, now);
         recentScanCache.set(pair[1].value, now);
         commitNewCard(pair);
-      } 
-      else if (frameValidItems.length === 1) {
+      } else {
         const target = frameValidItems[0];
         let matchedPartner = null;
-        for (let [bufCode, bufItem] of singleBarcodeBuffer.entries()) {
+        for (const [bufCode, bufItem] of singleBarcodeBuffer.entries()) {
           if (now - bufItem.time > 1500) {
             singleBarcodeBuffer.delete(bufCode);
             continue;
           }
-          const dist = Math.sqrt(Math.pow(target.x - bufItem.x, 2) + Math.pow(target.y - bufItem.y, 2));
+          const dist = Math.hypot(target.x - bufItem.x, target.y - bufItem.y);
           if (dist < 350 && target.value !== bufItem.value) {
             matchedPartner = bufItem;
             singleBarcodeBuffer.delete(bufCode);
             break;
           }
         }
-
         if (matchedPartner) {
-          let pair = [target, matchedPartner];
-          pair.sort((a, b) => a.y - b.y);
+          const pair = [target, matchedPartner].sort((a, b) => a.y - b.y);
           recentScanCache.set(pair[0].value, now);
           recentScanCache.set(pair[1].value, now);
           commitNewCard(pair);
         } else {
-          singleBarcodeBuffer.set(target.value, {
-            value: target.value, type: target.type, x: target.x, y: target.y, time: now
-          });
+          singleBarcodeBuffer.set(target.value, { ...target, time: now });
         }
       }
     }
 
-    function commitNewCard(pair) {
-      globalCardPairs.push(pair);
-      saveSinglePairToDB(pair);
+    async function commitNewCard(pair) {
+      scanOrderCounter += 1;
+      const card = {
+        pair,
+        store: selectedStore,
+        denomination: selectedDenom,
+        balance: selectedDenom,
+        folderId: DEFAULT_FOLDER_ID,
+        archived: false,
+        scanOrder: scanOrderCounter,
+        barcodeFormat: getStoreFormat(selectedStore),
+        timestamp: Date.now()
+      };
+
+      await saveCardToDB(card);
+      allCards.push(card);
+      allCards.sort((a, b) => a.scanOrder - b.scanOrder);
+
+      scanCooldownUntil = Date.now() + getScanCooldown();
+      singleBarcodeBuffer.clear();
 
       triggerVibration(60);
       playBeepSound();
-      
       flashEffect.style.display = 'block';
       setTimeout(() => { flashEffect.style.display = 'none'; }, 180);
 
-      scanCounter.innerText = `已歸檔: ${globalCardPairs.length} 張`;
-      scanStatusText.innerHTML = `🎉 成功入庫！條碼: <span style="color:#34c759;font-weight:bold;">${pair[0].value.substring(0,6)}...</span> 請換下一張`;
+      updateScanCounter();
+      scanStatusText.innerHTML = `🎉 入庫！${getStoreName(selectedStore)} ${selectedDenom}元 — 冷卻 ${getScanCooldown()}ms`;
+      log(`⚡ 新卡 #${card.scanOrder}：${getStoreName(selectedStore)} ${selectedDenom}元 [${pair[0].value}]`);
 
-      log(`⚡ 【嗶！】成功感應商品卡 (條碼: ${pair[0].value}) 並寫入儲存庫。`);
-      generateCardWallet(globalCardPairs);
+      if (currentView === 'wallet') {
+        appendCardToWallet(card);
+      } else {
+        renderWallet();
+      }
     }
 
-    function generateCardWallet(cardPairs) {
+    function buildCardHtml(card, indexInView, domPrefix) {
+      const displayPair = swapBarcodeSwitch.checked ? [...card.pair].reverse() : [...card.pair];
+      const balanceText = card.archived || card.balance === 0
+        ? '已用完'
+        : `餘額 ${card.balance}/${card.denomination}`;
+
+      let html = `
+        <div class="card-store-badge">${getStoreName(card.store)}</div>
+        <div class="card-top-layout">
+          <div class="mock-qr-section">
+            <div class="mock-qr-box"></div>
+            <div class="mock-qr-label">掃碼看優惠▼</div>
+          </div>
+          <div class="card-mid-text">
+            ・本卡無使用期限，可分次及合併使用...
+            <br>・#${card.scanOrder} ・ ${card.barcodeFormat}
+            <br>・${balanceText}
+          </div>
+          <div class="card-right-amount">${card.denomination}元</div>
+        </div>
+        <div class="barcodes-bottom-stack">
+      `;
+      displayPair.forEach((barcode, bIndex) => {
+        html += `
+          <div class="barcode-row-container">
+            <svg id="${domPrefix}-${card.id}-${bIndex}"></svg>
+            <div class="barcode-row-label">${barcode.value}</div>
+          </div>
+        `;
+      });
+      html += '</div>';
+      return { html, displayPair };
+    }
+
+    function renderBarcodeSvgs(cards, domPrefix, isFullscreen = false) {
+      const currentPct = parseInt(widthSeekbar.value, 10);
+      const walletH = parseInt(heightWalletSeekbar.value, 10);
+      const fsH = parseInt(heightFullscreenSeekbar.value, 10);
+      const dynamicScale = isFullscreen
+        ? Math.max(1.4, (currentPct / 82) * 1.55)
+        : Math.max(1.0, (currentPct / 82) * 1.15);
+      const height = isFullscreen ? fsH : walletH;
+
+      cards.forEach(card => {
+        const displayPair = swapBarcodeSwitch.checked ? [...card.pair].reverse() : [...card.pair];
+        displayPair.forEach((barcode, bIndex) => {
+          const sel = `#${domPrefix}-${card.id}-${bIndex}`;
+          if (!document.querySelector(sel)) return;
+          try {
+            JsBarcode(sel, barcode.value, {
+              format: card.barcodeFormat || 'CODE39',
+              width: dynamicScale,
+              height,
+              displayValue: false,
+              margin: 0
+            });
+          } catch (e) {}
+        });
+      });
+    }
+
+    function appendCardToWallet(card) {
+      walletSection.style.display = 'block';
+      emptyState.style.display = 'none';
+
+      const cardDiv = document.createElement('div');
+      cardDiv.className = 'gift-card';
+      cardDiv.dataset.cardId = card.id;
+      const { html } = buildCardHtml(card, 0, 'barcode-v12');
+      cardDiv.innerHTML = html;
+      cardDiv.addEventListener('click', () => {
+        stopCamera();
+        openFullscreenOverlay(card.id);
+      });
+      walletCarousel.appendChild(cardDiv);
+      renderBarcodeSvgs([card], 'barcode-v12', false);
+      walletIndicator.innerText = `共 ${getViewCards().length} 張`;
+    }
+
+    function renderWallet() {
+      const cards = getViewCards();
       walletCarousel.innerHTML = '';
       walletSection.style.display = 'block';
-      walletIndicator.innerText = `共 ${cardPairs.length} 張卡片 (滑動檢視)`;
+
+      if (cards.length === 0) {
+        emptyState.style.display = 'block';
+        emptyState.innerText = currentView === 'wallet' ? '尚無有效卡片，請掃描新增' : '封存區尚無已用完的卡片';
+        walletIndicator.innerText = '';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      walletIndicator.innerText = `共 ${cards.length} 張`;
 
       const fragment = document.createDocumentFragment();
-      cardPairs.forEach((pair, index) => {
+      cards.forEach((card, idx) => {
         const cardDiv = document.createElement('div');
-        cardDiv.className = 'gift-card';
-        const cardNum = index + 1;
-        
-        let html = `
-          <div class="card-top-layout">
-            <div class="mock-qr-section">
-              <div class="mock-qr-box"></div>
-              <div class="mock-qr-label">掃碼看優惠▼</div>
-            </div>
-            <div class="card-mid-text">
-              ・本卡無使用期限，可分次及合併使用...
-              <br>・發行人：全家便利商店股份有限公司。
-              <br>・卡片編號：2306024${cardNum}
-            </div>
-            <div class="card-right-amount">禮物卡${pair.length === 2 ? '100' : '50'}元</div>
-          </div>
-          <div class="barcodes-bottom-stack">
-        `;
-
-        const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
-        displayPair.forEach((barcode, bIndex) => {
-          html += `
-            <div class="barcode-row-container">
-              <svg id="barcode-v12-${cardNum}-${bIndex}"></svg>
-              <div class="barcode-row-label">${barcode.value}</div>
-            </div>
-          `;
-        });
-
-        html += `</div>`;
+        cardDiv.className = 'gift-card' + (currentView === 'archive' ? ' archived-style' : '');
+        cardDiv.dataset.cardId = card.id;
+        const { html } = buildCardHtml(card, idx, 'barcode-v12');
         cardDiv.innerHTML = html;
         cardDiv.addEventListener('click', () => {
           stopCamera();
-          openFullscreenOverlay(index);
+          openFullscreenOverlay(card.id);
         });
         fragment.appendChild(cardDiv);
       });
-
       walletCarousel.appendChild(fragment);
-      renderAllBarcodesGraphics();
-    }
 
-    function renderAllBarcodesGraphics() {
-      const currentPct = parseInt(widthSeekbar.value);
-      const dynamicScale = Math.max(1.0, (currentPct / 82) * 1.15);
       let offset = 0;
-      const batchSize = 25;
-
+      const batchSize = 20;
       function renderBatch() {
-        const limit = Math.min(offset + batchSize, globalCardPairs.length);
-        for (let index = offset; index < limit; index++) {
-          const cardNum = index + 1;
-          const pair = globalCardPairs[index];
-          const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
-
-          displayPair.forEach((barcode, bIndex) => {
-            const barcodeId = `#barcode-v12-${cardNum}-${bIndex}`;
-            if (!document.querySelector(barcodeId)) return;
-            try {
-              JsBarcode(barcodeId, barcode.value, {
-                format: "CODE39", width: dynamicScale, height: 24, displayValue: false, margin: 0
-              });
-            } catch (e) {}
-          });
-        }
+        const slice = cards.slice(offset, offset + batchSize);
+        renderBarcodeSvgs(slice, 'barcode-v12', false);
         offset += batchSize;
-        if (offset < globalCardPairs.length) { requestAnimationFrame(renderBatch); }
+        if (offset < cards.length) requestAnimationFrame(renderBatch);
       }
       requestAnimationFrame(renderBatch);
     }
 
-    function openFullscreenOverlay(targetIndex) {
+    function openFullscreenOverlay(cardId) {
+      overlayViewCards = getViewCards();
+      const targetIndex = overlayViewCards.findIndex(c => c.id === cardId);
+      if (targetIndex < 0) return;
+
       overlayCarousel.innerHTML = '';
       fullscreenOverlay.style.display = 'flex';
-      document.body.classList.add('high-contrast-mode'); 
+      document.body.classList.add('high-contrast-mode');
+      pendingBalanceByCardId.clear();
 
-      const currentPct = parseInt(widthSeekbar.value);
-      const dynamicScaleFS = Math.max(1.4, (currentPct / 82) * 1.55);
+      overlayViewCards.forEach(card => {
+        pendingBalanceByCardId.set(card.id, card.balance);
 
-      globalCardPairs.forEach((pair, index) => {
         const fullCard = document.createElement('div');
         fullCard.className = 'fullscreen-card';
-        const cardNum = index + 1;
-        
-        let barcodeHtml = '';
-        const displayPair = swapBarcodeSwitch.checked ? [...pair].reverse() : [...pair];
+        fullCard.dataset.cardId = card.id;
 
+        const displayPair = swapBarcodeSwitch.checked ? [...card.pair].reverse() : [...card.pair];
+        let barcodeHtml = '';
         displayPair.forEach((barcode, bIndex) => {
           barcodeHtml += `
             <div class="fullscreen-barcode-box">
-              <svg id="full-v12-${cardNum}-${bIndex}"></svg>
+              <svg id="full-v12-${card.id}-${bIndex}"></svg>
               <div class="fullscreen-barcode-text">${barcode.value}</div>
             </div>
           `;
         });
 
+        const isArchiveView = currentView === 'archive';
         fullCard.innerHTML = `
           <div class="fullscreen-card-content">
             <div style="display:flex; justify-content:space-between; font-size:12px; color:#86868b; font-weight:bold; border-bottom:1px solid #f5f5f7; padding-bottom:4px;">
-              <span>💳 實體條碼真跡模擬 (第 ${cardNum} 張)</span>
-              <span>${swapBarcodeSwitch.checked ? '🔄 順序已對調' : ''}</span>
+              <span>${getStoreName(card.store)} #${card.scanOrder}</span>
+              <span>${card.barcodeFormat}</span>
             </div>
             <div class="fullscreen-barcodes-stack">${barcodeHtml}</div>
-            <div style="text-align:center; font-size:11px; color:#86868b; font-weight:bold;">◀ 左右滑動切換卡片 ▶</div>
+            <div class="overlay-actions">
+              <div class="balance-row">
+                <span>餘額</span>
+                <input type="range" min="0" max="${card.denomination}" value="${card.balance}" data-balance-slider="${card.id}" ${isArchiveView ? 'disabled' : ''}>
+                <strong data-balance-display="${card.id}">${card.balance}</strong>
+                <span>/ ${card.denomination} 元</span>
+              </div>
+              <div class="overlay-btn-row">
+                ${isArchiveView ? '' : `<button class="btn btn-sm btn-success" type="button" data-confirm-balance="${card.id}">✓ 確認更新餘額</button>`}
+                <button class="btn btn-sm btn-danger" type="button" data-delete-card="${card.id}">🗑 刪除此卡</button>
+              </div>
+            </div>
           </div>
         `;
         overlayCarousel.appendChild(fullCard);
-
-        displayPair.forEach((barcode, bIndex) => {
-          try {
-            JsBarcode(`#full-v12-${cardNum}-${bIndex}`, barcode.value, {
-              format: "CODE39", width: dynamicScaleFS, height: 45, displayValue: false, margin: 0
-            });
-          } catch (e) {}
-        });
       });
 
-      overlayCounter.innerText = `${targetIndex + 1} / ${globalCardPairs.length}`;
+      renderBarcodeSvgs(overlayViewCards, 'full-v12', true);
+
+      overlayViewCards.forEach(card => {
+        const slider = overlayCarousel.querySelector(`[data-balance-slider="${card.id}"]`);
+        const display = overlayCarousel.querySelector(`[data-balance-display="${card.id}"]`);
+        if (slider) {
+          slider.addEventListener('input', () => {
+            pendingBalanceByCardId.set(card.id, parseInt(slider.value, 10));
+            display.textContent = slider.value;
+          });
+        }
+        const confirmBtn = overlayCarousel.querySelector(`[data-confirm-balance="${card.id}"]`);
+        if (confirmBtn) {
+          confirmBtn.addEventListener('click', () => confirmBalanceUpdate(card.id));
+        }
+        const deleteBtn = overlayCarousel.querySelector(`[data-delete-card="${card.id}"]`);
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', () => deleteCard(card.id));
+        }
+      });
+
+      overlayCounter.innerText = `${targetIndex + 1} / ${overlayViewCards.length}`;
       setTimeout(() => {
         overlayCarousel.children[targetIndex]?.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
       }, 50);
     }
 
+    async function confirmBalanceUpdate(cardId) {
+      const card = allCards.find(c => c.id === cardId);
+      if (!card) return;
+
+      const newBalance = pendingBalanceByCardId.get(cardId) ?? card.balance;
+      card.balance = newBalance;
+
+      const priorCards = allCards.filter(c =>
+        c.store === card.store &&
+        c.scanOrder < card.scanOrder &&
+        c.id !== card.id
+      );
+
+      for (const prior of priorCards) {
+        prior.balance = 0;
+        prior.archived = true;
+        await saveCardToDB(prior);
+      }
+
+      if (newBalance === 0) {
+        card.archived = true;
+      } else {
+        card.archived = false;
+      }
+      await saveCardToDB(card);
+
+      log(`💰 卡片 #${card.scanOrder} 餘額更新為 ${newBalance}；同超商較早 ${priorCards.length} 張已歸零封存。`);
+      updateScanCounter();
+      renderWallet();
+
+      if (newBalance === 0 || currentView === 'wallet') {
+        fullscreenOverlay.style.display = 'none';
+        document.body.classList.remove('high-contrast-mode');
+      } else {
+        openFullscreenOverlay(cardId);
+      }
+    }
+
+    async function deleteCard(cardId) {
+      if (!confirm('確定要刪除此卡片嗎？')) return;
+      await deleteCardFromDB(cardId);
+      allCards = allCards.filter(c => c.id !== cardId);
+      log(`🗑 已刪除卡片 id=${cardId}`);
+      updateScanCounter();
+      renderWallet();
+      fullscreenOverlay.style.display = 'none';
+      document.body.classList.remove('high-contrast-mode');
+    }
+
     overlayCarousel.addEventListener('scroll', () => {
       const idx = Math.round(overlayCarousel.scrollLeft / overlayCarousel.clientWidth);
-      if (idx >= 0 && idx < globalCardPairs.length) overlayCounter.innerText = `${idx + 1} / ${globalCardPairs.length}`;
+      if (idx >= 0 && idx < overlayViewCards.length) {
+        overlayCounter.innerText = `${idx + 1} / ${overlayViewCards.length}`;
+      }
     });
 
     closeOverlayBtn.addEventListener('click', () => {
       fullscreenOverlay.style.display = 'none';
-      document.body.classList.remove('high-contrast-mode'); 
+      document.body.classList.remove('high-contrast-mode');
     });
 
     widthSeekbar.addEventListener('input', (e) => {
-      const pct = e.target.value;
-      seekbarValDisplay.innerText = `${pct}%`;
-      document.documentElement.style.setProperty('--barcode-width', `${pct}%`);
-      if (globalCardPairs.length > 0) renderAllBarcodesGraphics();
+      seekbarValDisplay.innerText = `${e.target.value}%`;
+      document.documentElement.style.setProperty('--barcode-width', `${e.target.value}%`);
+      if (getViewCards().length > 0) renderBarcodeSvgs(getViewCards(), 'barcode-v12', false);
+      if (fullscreenOverlay.style.display === 'flex') renderBarcodeSvgs(overlayViewCards, 'full-v12', true);
+    });
+
+    heightWalletSeekbar.addEventListener('input', (e) => {
+      heightWalletDisplay.innerText = `${e.target.value}px`;
+      document.documentElement.style.setProperty('--barcode-height-wallet', `${e.target.value}px`);
+      if (getViewCards().length > 0) renderBarcodeSvgs(getViewCards(), 'barcode-v12', false);
+    });
+
+    heightFullscreenSeekbar.addEventListener('input', (e) => {
+      heightFullscreenDisplay.innerText = `${e.target.value}px`;
+      document.documentElement.style.setProperty('--barcode-height-fullscreen', `${e.target.value}px`);
+      if (fullscreenOverlay.style.display === 'flex') renderBarcodeSvgs(overlayViewCards, 'full-v12', true);
     });
 
     swapBarcodeSwitch.addEventListener('change', () => {
-      if (globalCardPairs.length > 0) generateCardWallet(globalCardPairs);
+      renderWallet();
+      if (fullscreenOverlay.style.display === 'flex' && overlayViewCards.length) {
+        const idx = Math.round(overlayCarousel.scrollLeft / overlayCarousel.clientWidth);
+        const cardId = overlayViewCards[idx]?.id;
+        if (cardId) openFullscreenOverlay(cardId);
+      }
     });
 
     initWasmEngine();
