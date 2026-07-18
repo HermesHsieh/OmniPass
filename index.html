@@ -29,7 +29,7 @@
       margin-bottom: 15px;
     }
 
-    /* 視訊掃描區域 - 預設隱藏，消除未啟動時的緊迫與焦慮感 */
+    /* 視訊掃描區域 */
     .scanner-container {
       position: relative;
       width: 100%;
@@ -40,7 +40,7 @@
       overflow: hidden;
       box-shadow: 0 8px 24px rgba(0,0,0,0.15);
       aspect-ratio: 4 / 3;
-      display: none; /* 預設完全不顯示，由 JS 動態控制切換 */
+      display: none;
       opacity: 0;
       transition: opacity 0.3s ease;
     }
@@ -49,7 +49,6 @@
       height: 100%;
       object-fit: cover;
     }
-    /* 掃描瞄準框與動態雷射線 */
     .scanner-overlay {
       position: absolute;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -84,15 +83,15 @@
       animation: scan-move 2s infinite ease-in-out;
     }
 
-    /* 頂層即時提示面板 */
-    .scan-status-banner {
+    /* 頂部計數面板 - 修正點 2: 獨立置頂 */
+    .scan-top-counter-banner {
       position: absolute;
       top: 12px; left: 12px; right: 12px;
-      background: rgba(0, 0, 0, 0.75);
+      background: rgba(0, 0, 0, 0.65);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       color: white;
-      padding: 8px 12px;
+      padding: 6px 12px;
       border-radius: 8px;
       font-size: 13px;
       display: flex;
@@ -100,6 +99,24 @@
       align-items: center;
       z-index: 10;
     }
+
+    /* 底部狀態面板 - 修正點 2: 獨立置底並加大空間防塞車 */
+    .scan-bottom-status-banner {
+      position: absolute;
+      bottom: 12px; left: 12px; right: 12px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      text-align: center;
+      z-index: 10;
+      line-height: 1.3;
+      word-break: break-all;
+    }
+
     .scan-success-flash {
       position: absolute;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -158,19 +175,19 @@
 
     .debug-control-group {
       grid-column: 1 / -1;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
       background: #e5e5ea;
-      padding: 10px 12px;
+      padding: 12px;
       border-radius: 8px;
       align-items: center;
     }
-    .seekbar-container { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px; }
+    .seekbar-container { display: flex; align-items: center; gap: 10px; width: 100%; }
     .seekbar-container input[type="range"] { flex: 1; cursor: pointer; }
-    .seekbar-val { font-weight: bold; color: #0071e3; min-width: 40px; }
+    .seekbar-val { font-weight: bold; color: #0071e3; min-width: 45px; text-align: right; }
     
-    /* 卡包樣式與全螢幕保持不變 */
+    /* 卡包樣式 */
     .wallet-section { margin-top: 20px; display: none; }
     .wallet-carousel {
       display: flex; gap: 15px; overflow-x: auto; scroll-snap-type: x mandatory;
@@ -220,7 +237,6 @@
     .high-contrast-mode { filter: contrast(1.1) brightness(1.03); }
     .log-panel { background-color: #1d1d1f; color: #30d158; font-family: monospace; padding: 12px; border-radius: 8px; height: 120px; overflow-y: auto; margin-top: 15px; font-size: 11px; }
 
-    /* 動畫設定 */
     @keyframes scan-move {
       0% { top: 5%; }
       50% { top: 95%; }
@@ -239,7 +255,7 @@
   <h1>商品卡超音速連續掃描器</h1>
   <p class="subtitle">🚀 視訊串流無感盲掃架顧 ・ 支援連續去重與自動語音反饋</p>
 
-  <!-- 鏡頭觀景窗與即時狀態區域 (UI 動態收合) -->
+  <!-- 鏡頭觀景窗與即時狀態區域 (UI 重構分離) -->
   <div class="scanner-container" id="scanner-visual-block">
     <video id="video-stream" autoplay playsinline muted></video>
     
@@ -249,9 +265,15 @@
       </div>
     </div>
     
-    <div class="scan-status-banner">
-      <span id="scan-status-text">⏸ 鏡頭尚未啟動</span>
-      <span id="scan-counter" style="background:#34c759; padding:2px 8px; border-radius:10px; font-weight:bold;">已歸檔: 0 張</span>
+    <!-- 修正點 2: 頂部專職顯示已掃描數量 -->
+    <div class="scan-top-counter-banner">
+      <span>📷 視訊掃描觀景窗</span>
+      <span id="scan-counter" style="background:#34c759; padding:2px 10px; border-radius:10px; font-weight:bold;">已歸檔: 0 張</span>
+    </div>
+
+    <!-- 修正點 2: 底部專職顯示動態狀態提示 -->
+    <div class="scan-bottom-status-banner" id="scan-status-text">
+      ⏸ 鏡頭尚未啟動
     </div>
 
     <div class="scan-success-flash" id="flash-effect"></div>
@@ -282,11 +304,19 @@
 
       <div class="debug-control-group">
         <div class="seekbar-container">
-          <label style="font-size: 12px; font-weight: bold; color: #1d1d1f;">📊 條碼顯示寬度:</label>
+          <label style="font-size: 12px; font-weight: bold; color: #1d1d1f; min-width: 85px;">📊 條碼顯示寬度:</label>
           <input type="range" id="width-seekbar" min="50" max="98" value="82">
           <span class="seekbar-val" id="seekbar-val-display">82%</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 6px;">
+        
+        <!-- 修正點 3: 新增秒數 Debug 控制滑桿 -->
+        <div class="seekbar-container">
+          <label style="font-size: 12px; font-weight: bold; color: #0071e3; min-width: 85px;">⏱ 去重冷卻時間:</label>
+          <input type="range" id="cache-timeout-seekbar" min="5" max="50" value="25">
+          <span class="seekbar-val" id="timeout-val-display">2.5s</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 6px; padding-left: 2px;">
           <input type="checkbox" id="swap-barcode-switch" style="width: auto; cursor: pointer;">
           <label for="swap-barcode-switch" style="font-size: 12px; font-weight: bold; color: #ff453a; cursor: pointer;">🔄 反轉上下條碼</label>
         </div>
@@ -338,6 +368,8 @@
 
     const widthSeekbar = document.getElementById('width-seekbar');
     const seekbarValDisplay = document.getElementById('seekbar-val-display');
+    const cacheTimeoutSeekbar = document.getElementById('cache-timeout-seekbar');
+    const timeoutValDisplay = document.getElementById('timeout-val-display');
     const swapBarcodeSwitch = document.getElementById('swap-barcode-switch');
 
     const fullscreenOverlay = document.getElementById('fullscreen-overlay');
@@ -355,9 +387,9 @@
     let hiddenCanvas = document.createElement('canvas');
     let hiddenCtx = hiddenCanvas.getContext('2d');
 
-    // 暫時去重快取 (防止同次對焦反覆觸發)
+    // 暫時去重快取時間 (預設 2500ms，改為可動態調整)
     let recentScanCache = new Map(); 
-    const CACHE_TIMEOUT = 2500; 
+    let currentCacheTimeout = 2500; 
 
     // 孤兒條碼緩衝區
     let singleBarcodeBuffer = new Map();
@@ -368,7 +400,6 @@
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     
-    // 成功提示音
     function playBeepSound() {
       try {
         const osc = audioCtx.createOscillator();
@@ -384,7 +415,6 @@
       } catch (e) {}
     }
 
-    // 重複或錯誤提示音 (低沈兩聲警告)
     function playWarningSound() {
       try {
         const osc = audioCtx.createOscillator();
@@ -419,7 +449,7 @@
         request.onerror = (e) => { reject(e); };
         request.onsuccess = (e) => {
           db = e.target.result;
-          log('📦 本地 IndexedDB 萬張級資料庫架構就緒。');
+          log('📦 本地 IndexedDB 資料庫架構就緒。');
           resolve(db);
         };
         request.onupgradeneeded = (e) => {
@@ -453,7 +483,7 @@
       store.add({ pair, timestamp: Date.now() });
     }
 
-    // 修正點 1: 一鍵清空時同步重置計數面板數字為 0
+    // 修正點 1: 優化一鍵清空，不污染和中斷鏡頭執行的狀態變數
     clearDbBtn.addEventListener('click', () => {
       if (!confirm('確定要清空所有本地暫存的卡片嗎？')) return;
       if (!db) return;
@@ -464,11 +494,15 @@
         walletCarousel.innerHTML = '';
         walletSection.style.display = 'none';
         
-        // 精準歸零面板
         scanCounter.innerText = `已歸檔: 0 張`;
-        scanStatusText.innerText = `⏸ 歷史快取已全部清空`;
+        // 如果此時鏡頭開著，就保留原有的「請對準綠框」字樣，不干擾鏡頭流程
+        if (isScanningActive) {
+          scanStatusText.innerText = '🟢 卡包已清空，請將下一張條碼對準綠框';
+        } else {
+          scanStatusText.innerText = '⏸ 歷史快取已全部清空';
+        }
         
-        log('🧹 卡包與歸檔計數器已完全清空重置！');
+        log('🧹 卡包與歸檔計數器已完全清空重置，鏡頭功能正常未受干擾！');
       };
     });
 
@@ -483,7 +517,7 @@
         await zbarModule.scanImageData(testCanvas.getContext('2d').getImageData(0, 0, 10, 10));
         
         startScanBtn.disabled = false;
-        log('🎉 解碼引擎初始化成功！已解鎖超商級連續視訊掃描。');
+        log('🎉 解碼引擎初始化成功！已解鎖視訊連續掃描。');
         
         await initDB();
         loadCardsFromDB();
@@ -492,11 +526,9 @@
       }
     }
 
-    // 修正點 2: 按下啟動時，動態打開 UI 元件，避免平日視覺焦慮
     async function startCamera() {
       if (localStream) { stopCamera(); }
       
-      // 展開 UI 元件並賦予平滑顯示
       scannerVisualBlock.style.display = 'block';
       setTimeout(() => { scannerVisualBlock.style.opacity = '1'; }, 20);
       
@@ -532,7 +564,6 @@
       };
     }
 
-    // 修正點 2: 按下暫停/關閉時，將動畫 UI 徹底收起來，眼不見為淨
     function stopCamera() {
       isScanningActive = false;
       if (scanAnimationFrameId) cancelAnimationFrame(scanAnimationFrameId);
@@ -544,9 +575,9 @@
       startScanBtn.style.display = 'inline-block';
       stopScanBtn.style.display = 'none';
       
-      // 徹底隱藏焦慮的掃描框框
       scannerVisualBlock.style.opacity = '0';
       scannerVisualBlock.style.display = 'none';
+      scanStatusText.innerText = '⏸ 鏡頭已暫停';
       log('⏸ 鏡頭已暫停，掃描動態線已卸載收合。');
     }
 
@@ -577,7 +608,6 @@
       }
     }
 
-    // 修正點 3: 檢查全庫，判斷條碼是否早已存在資料庫中
     function isBarcodeDuplicate(value) {
       return globalCardPairs.some(pair => 
         pair.some(barcode => barcode.value.trim() === value.trim())
@@ -590,8 +620,9 @@
       const excludeQr = excludeQrCodeToggle.checked;
       const now = Date.now();
 
+      // 修正點 3: 使用動態調整的冷卻時間
       for (let [code, time] of recentScanCache.entries()) {
-        if (now - time > CACHE_TIMEOUT) recentScanCache.delete(code);
+        if (now - time > currentCacheTimeout) recentScanCache.delete(code);
       }
 
       let frameValidItems = [];
@@ -603,16 +634,14 @@
         if (excludeQr && (type.includes('QR') || type.includes('DATA-MATRIX') || type === 'PDF417')) continue;
         if (value.length < minLen || value.length > maxLen) continue;
         
-        // 瞬間快取去重
         if (recentScanCache.has(value)) continue;
 
-        // 修正點 3: 全庫重複排除機制
         if (isBarcodeDuplicate(value)) {
-          recentScanCache.set(value, now); // 扔進快取避免這幾秒內連續發出警報
+          recentScanCache.set(value, now); 
           playWarningSound();
-          triggerVibration([40, 40, 40]); // 連震三次警告
-          scanStatusText.innerHTML = `⚠️ 條碼 <span style="color:#ff9500;font-weight:bold;">${value.substring(0,8)}...</span> 已在庫中，已過濾`;
-          log(`⚠️ 偵測到重複卡片：條碼 [${value}] 已存在於手機卡包，放棄寫入。`, 'warning');
+          triggerVibration([40, 40, 40]); 
+          scanStatusText.innerHTML = `⚠️ 條碼 <span style="color:#ff9500;font-weight:bold;">${value.substring(0,8)}...</span> 已在庫中`;
+          log(`⚠️ 偵測到重複卡片：條碼 [${value}] 已存在於手機卡包。`, 'warning');
           return; 
         }
 
@@ -671,7 +700,7 @@
       setTimeout(() => { flashEffect.style.display = 'none'; }, 180);
 
       scanCounter.innerText = `已歸檔: ${globalCardPairs.length} 張`;
-      scanStatusText.innerHTML = `🎉 成功入庫！條碼: <span style="color:#34c759;font-weight:bold;">${pair[0].value.substring(0,6)}...</span> 請換下一張`;
+      scanStatusText.innerHTML = `🎉 成功入庫！條碼: <span style="color:#34c759;font-weight:bold;">${pair[0].value.substring(0,8)}...</span>`;
 
       log(`⚡ 【嗶！】成功感應商品卡 (條碼: ${pair[0].value}) 並寫入儲存庫。`);
       generateCardWallet(globalCardPairs);
@@ -823,6 +852,13 @@
       seekbarValDisplay.innerText = `${pct}%`;
       document.documentElement.style.setProperty('--barcode-width', `${pct}%`);
       if (globalCardPairs.length > 0) renderAllBarcodesGraphics();
+    });
+
+    // 修正點 3: 監聽去重冷卻時間控制滑桿
+    cacheTimeoutSeekbar.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      currentCacheTimeout = val * 100; // 轉為毫秒 (5 = 500ms, 25 = 2500ms)
+      timeoutValDisplay.innerText = `${(val / 10).toFixed(1)}s`;
     });
 
     swapBarcodeSwitch.addEventListener('change', () => {
